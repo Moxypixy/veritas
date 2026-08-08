@@ -1,3 +1,9 @@
+mod commitment;
+
+pub use commitment::{
+    COMMITMENT_DOMAIN, CommitmentError, VoteAnswer, canonical_bytes, commitment_hash,
+};
+
 use kaspa_consensus_core::{
     hashing::{
         sighash::{SigHashReusedValuesUnsync, calc_schnorr_signature_hash},
