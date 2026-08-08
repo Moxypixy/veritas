@@ -1,7 +1,15 @@
 // Cost-of-Living Pulse — monthly vote deposit covenant (local Argent).
 //
-// Month checks take `current_yyyymm` as an entry argument. The local runtime /
-// tx builder supplies it; on-chain time introspection is not assumed here.
+// This Argent checkout exposes no UTC, block-time, or DAA-score primitive to
+// source entries. `current_yyyymm` is therefore untrusted caller input, not an
+// on-chain clock. The state records the derived unlock/abandon thresholds so a
+// caller cannot choose an unrelated month value; the future indexer/API must
+// additionally refuse a request whose month differs from its observed UTC month.
+//
+// The compiler also has no keyed registry/map state or negative-UTXO query.
+// `VoterBallot` is a single persistent lineage once opened, but a globally
+// unique wallet registry cannot be proven in this Argent source surface. A
+// later registry/indexer layer must prevent duplicate ballot genesis/opening.
 //
 // Deposit: fixed 10_000_000 sompi (0.1 KAS).
 // Unlock: next calendar month after the vote month.
@@ -21,12 +29,22 @@ state VoterBallotState {
 state VoteDepositState {
     byte[32] voter;
     int month_yyyymm;
+    int unlock_yyyymm;
+    int abandon_yyyymm;
     byte[32] commitment;
 }
 
 // Holds reclaimed deposit KAS until the voter closes it.
 state WalletPurseState {
     byte[32] owner;
+}
+
+// `reject_spend` is deliberately unsatisfiable, so no Argent transition can
+// spend this actor. `abandon` emits exactly this actor with the full deposit
+// value; generated output validation binds the recipient to this fixed actor
+// template/state.
+state BurnState {
+    int marker;
 }
 
 fn month_components_ok(yyyymm: int) -> int {
@@ -101,6 +119,8 @@ actor VoterBallot owns VoterBallotState {
         VoteDepositState new_deposit = {
             voter: voter,
             month_yyyymm: month_yyyymm,
+            unlock_yyyymm: add_months(month_yyyymm, 1),
+            abandon_yyyymm: add_months(month_yyyymm, 3),
             commitment: commitment,
         };
 
@@ -115,7 +135,8 @@ actor VoterBallot owns VoterBallotState {
 }
 
 actor VoteDeposit owns VoteDepositState {
-    // Voter reclaims the deposit once the unlock month has begun and before abandon.
+    // `current_yyyymm` must name this deposit's recorded unlock month, not an
+    // arbitrary later month. UTC-time validation remains an indexer/API duty.
     entry reclaim(
         voter_sig: sig,
         voter_pk: pubkey,
@@ -126,8 +147,9 @@ actor VoteDeposit owns VoteDepositState {
         require(blake2b(voter_pk) == voter);
         require(checkSig(voter_sig, voter_pk));
         require(month_components_ok(current_yyyymm) == 1);
-        require(current_yyyymm >= add_months(month_yyyymm, 1));
-        require(current_yyyymm < add_months(month_yyyymm, 3));
+        require(unlock_yyyymm == add_months(month_yyyymm, 1));
+        require(abandon_yyyymm == add_months(month_yyyymm, 3));
+        require(current_yyyymm == unlock_yyyymm);
         require(purse.value == self.value);
 
         WalletPurseState next_purse = {
@@ -137,10 +159,28 @@ actor VoteDeposit owns VoteDepositState {
         become purse <- WalletPurse(next_purse);
     }
 
-    // After the grace window, anyone may burn/abandon the locked deposit.
-    entry abandon(current_yyyymm: int) emits none {
+    // After the recorded grace threshold, anyone may burn the full deposit to
+    // the fixed Burn actor. This is deliberately not `emits none`.
+    entry abandon(current_yyyymm: int) emits {
+        burn: Burn;
+    } {
         require(month_components_ok(current_yyyymm) == 1);
-        require(current_yyyymm >= add_months(month_yyyymm, 3));
+        require(unlock_yyyymm == add_months(month_yyyymm, 1));
+        require(abandon_yyyymm == add_months(month_yyyymm, 3));
+        require(current_yyyymm == abandon_yyyymm);
+        require(burn.value == self.value);
+
+        BurnState burned = {
+            marker: 1,
+        };
+
+        become burn <- Burn(burned);
+    }
+}
+
+actor Burn owns BurnState {
+    entry reject_spend() emits none {
+        require(0 == 1);
     }
 }
 
@@ -155,5 +195,6 @@ app Pulse {
     actor BallotOffice;
     actor VoterBallot;
     actor VoteDeposit;
+    actor Burn;
     actor WalletPurse;
 }
