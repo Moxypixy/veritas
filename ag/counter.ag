@@ -1,0 +1,25 @@
+state CounterState {
+    int count;
+}
+
+actor Counter owns CounterState {
+    entry bump(delta: int) emits {
+        next: Counter;
+    } {
+        require(delta > 0);
+
+        CounterState updated = {
+            count: count + delta,
+        };
+
+        require(next.value == self.value);
+        // or: unrestricted(next.value);
+
+        // Require the output to reflect this actor's updated state.
+        become next <- Counter(updated);
+    }
+}
+
+app Demo {
+    actor Counter;
+}
