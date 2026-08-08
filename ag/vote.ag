@@ -1,0 +1,159 @@
+// Cost-of-Living Pulse — monthly vote deposit covenant (local Argent).
+//
+// Month checks take `current_yyyymm` as an entry argument. The local runtime /
+// tx builder supplies it; on-chain time introspection is not assumed here.
+//
+// Deposit: fixed 10_000_000 sompi (0.1 KAS).
+// Unlock: next calendar month after the vote month.
+// Abandon: two calendar months after unlock begins (vote month + 3).
+
+const int DEPOSIT_SOMPI = 10000000;
+
+state BallotOfficeState {
+    int ballots_opened;
+}
+
+state VoterBallotState {
+    byte[32] voter;
+    int last_month_yyyymm;
+}
+
+state VoteDepositState {
+    byte[32] voter;
+    int month_yyyymm;
+    byte[32] commitment;
+}
+
+// Holds reclaimed deposit KAS until the voter closes it.
+state WalletPurseState {
+    byte[32] owner;
+}
+
+fn month_components_ok(yyyymm: int) -> int {
+    int year = yyyymm / 100;
+    int month = yyyymm - year * 100;
+    int ok = 0;
+    if (year >= 2026 && month >= 1 && month <= 12) {
+        ok = 1;
+    }
+    return ok;
+}
+
+fn add_months(yyyymm: int, delta: int) -> int {
+    int year = yyyymm / 100;
+    int month = yyyymm - year * 100;
+    int zero_based = year * 12 + (month - 1) + delta;
+    int new_year = zero_based / 12;
+    int new_month = zero_based - new_year * 12 + 1;
+    return new_year * 100 + new_month;
+}
+
+actor BallotOffice owns BallotOfficeState {
+    // Opens a per-wallet ballot tracker. One office can open many ballots.
+    entry open_ballot(voter_sig: sig, voter_pk: pubkey) emits {
+        office: BallotOffice;
+        ballot: VoterBallot;
+    } {
+        require(checkSig(voter_sig, voter_pk));
+
+        byte[32] voter = blake2b(voter_pk);
+        BallotOfficeState next_office = {
+            ballots_opened: ballots_opened + 1,
+        };
+        VoterBallotState new_ballot = {
+            voter: voter,
+            last_month_yyyymm: 0,
+        };
+
+        require(office.value == self.value);
+        require(ballot.value > 0);
+
+        become {
+            office <- BallotOffice(next_office);
+            ballot <- VoterBallot(new_ballot);
+        };
+    }
+}
+
+actor VoterBallot owns VoterBallotState {
+    // Casts this month's vote: locks deposit + commitment, advances last_month.
+    entry vote(
+        voter_sig: sig,
+        voter_pk: pubkey,
+        month_yyyymm: int,
+        current_yyyymm: int,
+        commitment: byte[32]
+    ) emits {
+        ballot: VoterBallot;
+        deposit: VoteDeposit;
+    } {
+        require(blake2b(voter_pk) == voter);
+        require(checkSig(voter_sig, voter_pk));
+        require(month_components_ok(month_yyyymm) == 1);
+        require(month_components_ok(current_yyyymm) == 1);
+        require(month_yyyymm == current_yyyymm);
+        require(month_yyyymm > last_month_yyyymm);
+
+        VoterBallotState next_ballot = {
+            voter: voter,
+            last_month_yyyymm: month_yyyymm,
+        };
+        VoteDepositState new_deposit = {
+            voter: voter,
+            month_yyyymm: month_yyyymm,
+            commitment: commitment,
+        };
+
+        require(ballot.value == self.value);
+        require(deposit.value == DEPOSIT_SOMPI);
+
+        become {
+            ballot <- VoterBallot(next_ballot);
+            deposit <- VoteDeposit(new_deposit);
+        };
+    }
+}
+
+actor VoteDeposit owns VoteDepositState {
+    // Voter reclaims the deposit once the unlock month has begun and before abandon.
+    entry reclaim(
+        voter_sig: sig,
+        voter_pk: pubkey,
+        current_yyyymm: int
+    ) emits {
+        purse: WalletPurse;
+    } {
+        require(blake2b(voter_pk) == voter);
+        require(checkSig(voter_sig, voter_pk));
+        require(month_components_ok(current_yyyymm) == 1);
+        require(current_yyyymm >= add_months(month_yyyymm, 1));
+        require(current_yyyymm < add_months(month_yyyymm, 3));
+        require(purse.value == self.value);
+
+        WalletPurseState next_purse = {
+            owner: voter,
+        };
+
+        become purse <- WalletPurse(next_purse);
+    }
+
+    // After the grace window, anyone may burn/abandon the locked deposit.
+    entry abandon(current_yyyymm: int) emits none {
+        require(month_components_ok(current_yyyymm) == 1);
+        require(current_yyyymm >= add_months(month_yyyymm, 3));
+    }
+}
+
+actor WalletPurse owns WalletPurseState {
+    entry close(owner_sig: sig, owner_pk: pubkey) emits none {
+        require(blake2b(owner_pk) == owner);
+        require(checkSig(owner_sig, owner_pk));
+    }
+}
+
+app Pulse {
+    actor BallotOffice;
+    actor VoterBallot;
+    actor VoteDeposit;
+    actor WalletPurse;
+}
