@@ -1,19 +1,21 @@
 // Cost-of-Living Pulse — monthly vote deposit covenant (local Argent).
 //
-// This Argent checkout exposes no UTC, block-time, or DAA-score primitive to
-// source entries. `current_yyyymm` is therefore untrusted caller input, not an
-// on-chain clock. The state records the derived unlock/abandon thresholds so a
-// caller cannot choose an unrelated month value; the future indexer/API must
-// additionally refuse a request whose month differs from its observed UTC month.
+// v1 trust boundary (approved Option A, 2026-08-10):
+// - On-chain (this file): deposit lock amount, commitment hash storage,
+//   per-lineage month monotonicity, reclaim/abandon thresholds, burn path.
+// - Trusted indexer/API (later tasks): one ballot / one vote per wallet, and
+//   that supplied YYYYMM matches the observed UTC calendar month. Consent UI
+//   must state this split before voting.
 //
-// The compiler also has no keyed registry/map state or negative-UTXO query.
-// `VoterBallot` is a single persistent lineage once opened, but a globally
-// unique wallet registry cannot be proven in this Argent source surface. A
-// later registry/indexer layer must prevent duplicate ballot genesis/opening.
+// This Argent checkout exposes no UTC/DAA clock and no keyed wallet registry,
+// so those two rules cannot be proven in-covenant today. `current_yyyymm` is
+// caller input; unlock/abandon thresholds are stored on the deposit so a
+// later caller cannot invent unrelated threshold months.
 //
 // Deposit: fixed 10_000_000 sompi (0.1 KAS).
 // Unlock: next calendar month after the vote month.
-// Abandon: two calendar months after unlock begins (vote month + 3).
+// Reclaim window: unlock_yyyymm <= current < abandon_yyyymm.
+// Abandon: current >= abandon_yyyymm (vote month + 3).
 
 const int DEPOSIT_SOMPI = 10000000;
 
@@ -135,8 +137,7 @@ actor VoterBallot owns VoterBallotState {
 }
 
 actor VoteDeposit owns VoteDepositState {
-    // `current_yyyymm` must name this deposit's recorded unlock month, not an
-    // arbitrary later month. UTC-time validation remains an indexer/API duty.
+    // Reclaim during unlock..grace. UTC correctness is an indexer/API duty.
     entry reclaim(
         voter_sig: sig,
         voter_pk: pubkey,
@@ -149,7 +150,8 @@ actor VoteDeposit owns VoteDepositState {
         require(month_components_ok(current_yyyymm) == 1);
         require(unlock_yyyymm == add_months(month_yyyymm, 1));
         require(abandon_yyyymm == add_months(month_yyyymm, 3));
-        require(current_yyyymm == unlock_yyyymm);
+        require(current_yyyymm >= unlock_yyyymm);
+        require(current_yyyymm < abandon_yyyymm);
         require(purse.value == self.value);
 
         WalletPurseState next_purse = {
@@ -167,7 +169,7 @@ actor VoteDeposit owns VoteDepositState {
         require(month_components_ok(current_yyyymm) == 1);
         require(unlock_yyyymm == add_months(month_yyyymm, 1));
         require(abandon_yyyymm == add_months(month_yyyymm, 3));
-        require(current_yyyymm == abandon_yyyymm);
+        require(current_yyyymm >= abandon_yyyymm);
         require(burn.value == self.value);
 
         BurnState burned = {
