@@ -215,3 +215,52 @@ async fn aggregates_suppress_results_until_five_votes_exist() {
         json!({ "necessities_avg_pct": null, "n": 4, "suppressed": true })
     );
 }
+
+#[tokio::test]
+async fn aggregates_suppress_all_related_bins_when_one_employment_group_is_sensitive() {
+    let chain = Arc::new(FakeChainVerifier::default());
+    let app = test_app(chain.clone()).await;
+
+    for index in 0..6 {
+        let wallet = format!("wallet-{index}");
+        let answer = vote(&wallet, 40 + index, index < 5);
+        let commitment = commitment_hash(&answer).unwrap();
+        chain.insert(&wallet, "2026-08", commitment);
+        let session = authenticated_session(app.clone(), &wallet).await;
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/votes")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&vote_request(&answer, commitment)).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    for (employment, n) in [("all", 6), ("employed", 5), ("unemployed", 1)] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/aggregates?region_id=euro-area&month_key=2026-08&employment={employment}"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            json_response(response).await,
+            json!({ "necessities_avg_pct": null, "n": n, "suppressed": true })
+        );
+    }
+}

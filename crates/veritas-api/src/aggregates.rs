@@ -41,7 +41,14 @@ pub(crate) async fn get(
         .database
         .aggregate(&query.region_id, &query.month_key, &query.employment)
         .await?;
-    let suppressed = n < SUPPRESSION_THRESHOLD;
+    let (_, employed_n, unemployed_n) = state
+        .database
+        .employment_counts(&query.region_id, &query.month_key)
+        .await?;
+    let suppressed = n < SUPPRESSION_THRESHOLD
+        || [employed_n, unemployed_n]
+            .into_iter()
+            .any(|count| (1..SUPPRESSION_THRESHOLD).contains(&count));
     Ok(Json(AggregateResponse {
         necessities_avg_pct: (!suppressed).then(|| necessities_sum as f64 / n as f64),
         n,

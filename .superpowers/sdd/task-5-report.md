@@ -30,6 +30,19 @@ git diff --check
 The workspace test run completed 11 tests: 3 commitment tests, 5 local-runtime
 vote tests, and 3 API tests.
 
+## Critical-review remediation
+
+- Aggregate reads now load the `all`, `employed`, and `unemployed` counts for
+  the requested region and month. A response is suppressed when its own count
+  is below five or either employment subgroup has a positive count below five.
+  This prevents publishing `all` or the complementary subgroup when their
+  difference would reveal a suppressed subgroup.
+- Added a regression with five employed and one unemployed vote. It verifies
+  that the `all` (`n = 6`), `employed` (`n = 5`), and `unemployed` (`n = 1`)
+  responses all suppress `necessities_avg_pct`.
+- `cargo test -p veritas-api` passed: 4 integration tests and 0 unit/doc tests.
+- `cargo fmt --check` passed.
+
 ## Trust boundary and follow-up
 
 - The indexer is intentionally trusted to impose one global ballot per wallet

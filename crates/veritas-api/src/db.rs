@@ -239,4 +239,29 @@ impl Database {
             .map(|row| (row.get("n"), row.get("necessities_sum")))
             .unwrap_or((0, 0)))
     }
+
+    pub(crate) async fn employment_counts(
+        &self,
+        region_id: &str,
+        month_key: &str,
+    ) -> Result<(i64, i64, i64), ApiError> {
+        let row = sqlx::query(
+            "SELECT
+                COALESCE(MAX(CASE WHEN employment = 'all' THEN n END), 0) AS all_n,
+                COALESCE(MAX(CASE WHEN employment = 'employed' THEN n END), 0) AS employed_n,
+                COALESCE(MAX(CASE WHEN employment = 'unemployed' THEN n END), 0) AS unemployed_n
+             FROM aggregate_bins
+             WHERE region_id = ? AND month_key = ?",
+        )
+        .bind(region_id)
+        .bind(month_key)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|_| ApiError::unavailable("database unavailable"))?;
+        Ok((
+            row.get("all_n"),
+            row.get("employed_n"),
+            row.get("unemployed_n"),
+        ))
+    }
 }
