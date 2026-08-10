@@ -17,6 +17,7 @@ impl AuthVerifier for UnconfiguredAuthVerifier {
         _wallet: &str,
         _challenge: &str,
         _signature: &str,
+        _public_key: &str,
     ) -> Result<bool, ApiError> {
         Err(ApiError::unavailable(
             "wallet authentication is not configured",
@@ -43,6 +44,11 @@ impl ChainVerifier for UnconfiguredChainVerifier {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if env::var("VERITAS_KASPA_NETWORK").as_deref() != Ok("kaspa_testnet_10") {
+        return Err(
+            "VERITAS_KASPA_NETWORK must be kaspa_testnet_10; mainnet is unsupported".into(),
+        );
+    }
     let database_url = env::var("DATABASE_URL")
         .map_err(|_| "DATABASE_URL must name the SQLite database, e.g. sqlite://veritas.db")?;
     let encoded_data_key =

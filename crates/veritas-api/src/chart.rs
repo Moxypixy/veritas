@@ -142,6 +142,7 @@ mod tests {
             _wallet: &str,
             _challenge: &str,
             _signature: &str,
+            _public_key: &str,
         ) -> Result<bool, ApiError> {
             Ok(false)
         }

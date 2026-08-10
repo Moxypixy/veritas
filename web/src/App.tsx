@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from 'react'
 
+import { commitmentHash } from './commitment'
+import { walletAuthApi } from './wallet/api'
+import { connectAndAuthenticate, getKaswareProvider, walletErrorMessage, type WalletSession } from './wallet/kasware'
 import ChartPage from './pages/ChartPage'
 
 const REGIONS = [
@@ -24,6 +27,9 @@ function VotePage() {
   const [depositConfirmed, setDepositConfirmed] = useState(false)
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [walletSession, setWalletSession] = useState<WalletSession | null>(null)
+  const [walletBusy, setWalletBusy] = useState(false)
+  const [pendingCommitment, setPendingCommitment] = useState<string | null>(null)
 
   const durationLabel = employment === 'employed' ? 'How many months have you been employed?' : 'How many months have you been unemployed?'
 
@@ -33,7 +39,48 @@ function VotePage() {
       setMessage('Confirm the deposit and privacy statements before continuing.')
       return
     }
-    setMessage('Your answers are ready for wallet approval. Wallet connection and transaction signing arrive in Task 10; no vote or deposit has been submitted.')
+    if (!walletSession) {
+      setMessage('Connect and authenticate a Kaspa Testnet-10 wallet before reviewing the transaction.')
+      return
+    }
+    const form = new FormData(event.currentTarget)
+    const salt = crypto.getRandomValues(new Uint8Array(16))
+    const now = new Date()
+    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+    try {
+      const commitment = commitmentHash({
+        regionId: String(form.get('region')),
+        necessitiesPct: Number(form.get('necessities')),
+        employed: form.get('employment') === 'employed',
+        durationMonths: Number(form.get('duration')),
+        monthKey,
+        wallet: walletSession.wallet,
+        salt,
+      })
+      setPendingCommitment(commitment)
+      setMessage(`Commitment ${commitment.slice(0, 12)}… is ready. Transaction construction is not configured in this deployment, so no transaction can be signed or broadcast.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The vote commitment could not be built.')
+    }
+  }
+
+  async function connectWallet() {
+    const provider = getKaswareProvider()
+    if (!provider) {
+      setMessage('No compatible Kaspa wallet was found. Install KasWare or open a wallet browser that provides window.kasware.')
+      return
+    }
+    setWalletBusy(true)
+    setMessage(null)
+    try {
+      const session = await connectAndAuthenticate(provider, walletAuthApi)
+      setWalletSession(session)
+      setMessage(`Wallet authenticated for ${session.wallet}.`)
+    } catch (error) {
+      setMessage(walletErrorMessage(error))
+    } finally {
+      setWalletBusy(false)
+    }
   }
 
   if (!consented) {
@@ -110,8 +157,11 @@ function VotePage() {
 
         <section className="deposit" aria-labelledby="deposit-heading">
           <h2 id="deposit-heading">Testnet deposit: 0.1 KAS</h2>
-          <p>This amount is displayed before any future wallet approval. This Task does not connect a wallet, sign, or send a transaction.</p>
-          <button type="button" className="secondary" onClick={() => setMessage('Wallet connection will be added in Task 10. No wallet is connected.')}>Connect wallet (coming soon)</button>
+          <p>Before a transaction can be signed, you will see its destination, 0.1 KAS deposit, and commitment. Your wallet asks for approval; this app does not receive private keys or seed phrases.</p>
+          <button type="button" className="secondary" onClick={connectWallet} disabled={walletBusy}>
+            {walletBusy ? 'Connecting wallet…' : walletSession ? 'Wallet authenticated' : 'Connect Kaspa Testnet-10 wallet'}
+          </button>
+          {walletSession && <p className="help">Connected: {walletSession.wallet}</p>}
         </section>
 
         <fieldset>
@@ -127,6 +177,19 @@ function VotePage() {
         </fieldset>
 
         {message && <p className="status" role="status">{message}</p>}
+        {pendingCommitment && (
+          <section className="deposit" aria-labelledby="transaction-review-heading">
+            <h2 id="transaction-review-heading">Transaction review</h2>
+            <dl className="facts">
+              <div><dt>Network</dt><dd>Kaspa Testnet-10 only</dd></div>
+              <div><dt>Deposit</dt><dd>0.1 KAS (10,000,000 sompi)</dd></div>
+              <div><dt>Commitment</dt><dd><code>{pendingCommitment}</code></dd></div>
+              <div><dt>Destination</dt><dd>Awaiting an unsigned covenant transaction from the server.</dd></div>
+            </dl>
+            <p>The wallet will show its own signing approval. This application will only request signing after this review and will only broadcast after that approval.</p>
+            <button type="button" disabled>Transaction template unavailable</button>
+          </section>
+        )}
         <button type="submit">Review vote</button>
       </form>
     </main>

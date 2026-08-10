@@ -57,6 +57,7 @@ impl AuthVerifier for AcceptingAuthVerifier {
         _wallet: &str,
         _challenge: &str,
         signature: &str,
+        _public_key: &str,
     ) -> Result<bool, ApiError> {
         Ok(signature == "test-signature")
     }
@@ -111,6 +112,7 @@ async fn authenticated_session(app: axum::Router, wallet: &str) -> String {
             "wallet": wallet,
             "nonce": challenge["nonce"],
             "signature": "test-signature",
+            "public_key": "02aabbccddeeff",
         }),
     )
     .await;
@@ -165,6 +167,57 @@ async fn challenge_verification_creates_a_wallet_bound_session() {
     let token = authenticated_session(app, "wallet-a").await;
 
     assert!(!token.is_empty());
+}
+
+#[tokio::test]
+async fn challenge_response_has_a_domain_separated_expiring_message() {
+    let app = test_app(Arc::new(FakeChainVerifier::default())).await;
+
+    let response = post(
+        app,
+        "/v1/auth/challenge",
+        json!({ "wallet": "kaspatest:wallet-a" }),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = json_response(response).await;
+    assert!(body["message"].as_str().is_some_and(|message| {
+        message.starts_with("Veritas login\nwallet=kaspatest:wallet-a\nnonce=")
+            && message.ends_with("\nexpires_at=2026-08-10T12:05:00+00:00")
+    }));
+}
+
+#[tokio::test]
+async fn verification_rejects_an_invalid_wallet_signature() {
+    let app = test_app(Arc::new(FakeChainVerifier::default())).await;
+    let challenge = json_response(
+        post(
+            app.clone(),
+            "/v1/auth/challenge",
+            json!({ "wallet": "kaspatest:wallet-a" }),
+        )
+        .await,
+    )
+    .await;
+
+    let response = post(
+        app,
+        "/v1/auth/verify",
+        json!({
+            "wallet": "kaspatest:wallet-a",
+            "nonce": challenge["nonce"],
+            "signature": "forged-signature",
+            "public_key": "02aabbccddeeff",
+        }),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        json_response(response).await,
+        json!({ "error": "wallet signature is invalid" })
+    );
 }
 
 #[tokio::test]
