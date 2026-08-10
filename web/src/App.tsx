@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 
+import ChartPage from './pages/ChartPage'
+
 const REGIONS = [
   { id: 'euro-area', label: 'Euro area' },
   { id: 'united-states', label: 'United States' },
@@ -7,7 +9,16 @@ const REGIONS = [
   { id: 'japan', label: 'Japan' },
 ] as const
 
-export default function App() {
+function Navigation() {
+  return (
+    <nav className="site-nav" aria-label="Primary navigation">
+      <a href="/" aria-current="page">Vote</a>
+      <a href="/chart">Chart</a>
+    </nav>
+  )
+}
+
+function VotePage() {
   const [consented, setConsented] = useState(false)
   const [employment, setEmployment] = useState<'employed' | 'unemployed'>('employed')
   const [depositConfirmed, setDepositConfirmed] = useState(false)
@@ -28,6 +39,7 @@ export default function App() {
   if (!consented) {
     return (
       <main className="page">
+        <Navigation />
         <header className="hero">
           <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
           <h1>Before you vote</h1>
@@ -65,6 +77,7 @@ export default function App() {
 
   return (
     <main className="page">
+      <Navigation />
       <header className="hero">
         <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
         <h1>Share this month’s experience</h1>
@@ -118,4 +131,8 @@ export default function App() {
       </form>
     </main>
   )
+}
+
+export default function App() {
+  return window.location.pathname === '/chart' ? <ChartPage /> : <VotePage />
 }

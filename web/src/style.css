@@ -15,6 +15,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .page { width: min(100% - 2rem, 48rem); margin: 0 auto; padding: 3rem 0; }
+.site-nav { display: flex; gap: 1rem; margin-bottom: 2rem; }
+.site-nav a { color: #15543e; font-weight: 700; padding: .5rem .75rem; }
+.site-nav a[aria-current="page"] { background: #dcece2; border-radius: .375rem; color: #102f23; text-decoration-thickness: .15em; }
 .hero { margin-bottom: 2rem; }
 .eyebrow { color: #315f4f; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: .82rem; }
 h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; margin: .5rem 0 1rem; }
@@ -48,6 +51,17 @@ button:hover { background: #0d4934; border-color: #0d4934; }
 button.secondary { background: #fff; color: #15543e; margin-top: 1rem; }
 button.secondary:hover { background: #e7f1eb; }
 .status { background: #e8f2ff; border-left: .3rem solid #005fcc; margin: 1.5rem 0 0; padding: .85rem 1rem; }
+.chart-filters { margin-top: 1.5rem; }
+.filter-buttons { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: .5rem; }
+button.filter-button { background: #fff; color: #15543e; margin-top: 0; }
+button.filter-button[aria-pressed="true"] { background: #166247; color: #fff; }
+.chart-table-wrap { margin-top: 1rem; overflow-x: auto; }
+table { border-collapse: collapse; min-width: 100%; text-align: left; }
+caption { font-weight: 700; padding-bottom: .75rem; text-align: left; }
+th, td { border: 1px solid #b8c6bf; padding: .7rem; vertical-align: top; }
+thead { background: #e7f1eb; }
+.chart-footnotes { color: #48574f; font-size: .92rem; margin-top: 1rem; }
+.chart-footnotes p { margin: .4rem 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
