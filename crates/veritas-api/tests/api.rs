@@ -16,6 +16,7 @@ use veritas::{VoteAnswer, commitment_hash};
 use veritas_api::{
     ApiError, AppState, AuthVerifier, ChainVerifier, DataKey, Database, FixedClock, router,
 };
+use veritas_inflation::{OfficialPoint, OfficialSeries};
 
 #[derive(Default)]
 struct FakeChainVerifier {
@@ -63,6 +64,10 @@ impl AuthVerifier for AcceptingAuthVerifier {
 
 async fn test_app(chain: Arc<FakeChainVerifier>) -> axum::Router {
     let database = Database::connect("sqlite::memory:").await.unwrap();
+    test_app_with_database(database, chain)
+}
+
+fn test_app_with_database(database: Database, chain: Arc<FakeChainVerifier>) -> axum::Router {
     let clock = FixedClock::new(Utc.with_ymd_and_hms(2026, 8, 10, 12, 0, 0).unwrap());
     router(AppState::new(
         database,
@@ -279,6 +284,104 @@ async fn aggregates_suppress_all_related_bins_when_one_employment_group_is_sensi
             json!({ "necessities_avg_pct": null, "n": n, "suppressed": true })
         );
     }
+}
+
+#[tokio::test]
+async fn chart_exposes_plain_language_official_price_series() {
+    let database = Database::connect("sqlite::memory:").await.unwrap();
+    database
+        .replace_official_series(
+            "euro-area",
+            &[OfficialSeries {
+                key: "prices_overall".into(),
+                label: "How fast prices are rising overall".into(),
+                points: vec![OfficialPoint {
+                    month_key: "2026-08".into(),
+                    value: 2.1,
+                }],
+            }],
+        )
+        .await
+        .unwrap();
+    let app = test_app_with_database(database, Arc::new(FakeChainVerifier::default()));
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/chart?region_id=euro-area")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        json_response(response).await,
+        json!({
+            "region_id": "euro-area",
+            "official_unavailable": false,
+            "series": [{
+                "key": "prices_overall",
+                "label": "How fast prices are rising overall",
+                "points": [{ "month_key": "2026-08", "value": 2.1 }]
+            }, {
+                "key": "voters_necessities",
+                "label": "What voters say they spend on necessities",
+                "points": []
+            }]
+        })
+    );
+}
+
+#[tokio::test]
+async fn chart_marks_official_series_unavailable_without_a_successful_fetch() {
+    let chain = Arc::new(FakeChainVerifier::default());
+    let app = test_app(chain.clone()).await;
+
+    for index in 0..5 {
+        let wallet = format!("wallet-{index}");
+        let answer = vote(&wallet, 40 + index, true);
+        let commitment = commitment_hash(&answer).unwrap();
+        chain.insert(&wallet, "2026-08", commitment);
+        let session = authenticated_session(app.clone(), &wallet).await;
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/votes")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&vote_request(&answer, commitment)).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/chart?region_id=euro-area")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        json_response(response).await,
+        json!({
+            "region_id": "euro-area",
+            "official_unavailable": true,
+            "series": [{
+                "key": "voters_necessities",
+                "label": "What voters say they spend on necessities",
+                "points": [{ "month_key": "2026-08", "value": 42.0 }]
+            }]
+        })
+    );
 }
 
 #[tokio::test]

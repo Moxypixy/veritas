@@ -8,7 +8,7 @@ publish = false
 default-run = "counter"
 
 [workspace]
-members = [".", "crates/veritas-api"]
+members = [".", "crates/veritas-api", "crates/veritas-inflation"]
 resolver = "3"
 
 [dependencies]

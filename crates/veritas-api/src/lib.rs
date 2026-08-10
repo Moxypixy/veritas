@@ -8,6 +8,7 @@
 
 mod aggregates;
 mod auth;
+mod chart;
 mod crypto;
 mod db;
 mod gdpr;
@@ -150,6 +151,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/auth/verify", axum::routing::post(auth::verify))
         .route("/v1/votes", axum::routing::post(submit::submit))
         .route("/v1/aggregates", axum::routing::get(aggregates::get))
+        .route("/v1/chart", axum::routing::get(chart::get))
         .route("/v1/me/export", axum::routing::get(gdpr::export))
         .route("/v1/me/answers", axum::routing::delete(gdpr::erase))
         .with_state(state)
