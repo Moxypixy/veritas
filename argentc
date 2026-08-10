@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+argent_dir="${ARGENT_TEMPLATE_ARGENT_DIR:-"C:/Users/linft/argent-demos/argent"}"
+manifest="$argent_dir/Cargo.toml"
+
+if [[ ! -f "$manifest" ]]; then
+    echo "error: Argent checkout not found at $argent_dir" >&2
+    echo "set ARGENT_TEMPLATE_ARGENT_DIR to the local Argent checkout" >&2
+    exit 1
+fi
+
+exec cargo run --quiet --manifest-path "$manifest" --bin argentc -- "$@"

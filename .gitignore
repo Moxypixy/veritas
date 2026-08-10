@@ -1,9 +1,11 @@
 .cursor/
 .vscode/
-scripts/
+# Keep helper scripts used only by agents out of git if desired:
+# /scripts/agent-*
 *.env
 .env.*
 node_modules/
 target/
 build/
 dist/
+# Do not ignore setup-win.ps1, check-win.ps1, or argentc wrappers.
