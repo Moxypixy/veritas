@@ -127,6 +127,22 @@ export function ChartContent({ response }: { response: ChartResponse }) {
   )
 }
 
+export function ChartDataSection({
+  error,
+  response,
+}: {
+  error: string | null
+  response: ChartResponse | null
+}) {
+  if (error) {
+    return <p className="status" role="alert">{error}</p>
+  }
+  if (!response) {
+    return <p className="status" role="status">Loading chart data…</p>
+  }
+  return <ChartContent response={response} />
+}
+
 export default function ChartPage({ loadChart: requestChart = loadChart }: ChartPageProps) {
   const [regionId, setRegionId] = useState('euro-area')
   const [employment, setEmployment] = useState<EmploymentFilter>('all')
@@ -136,6 +152,7 @@ export default function ChartPage({ loadChart: requestChart = loadChart }: Chart
   useEffect(() => {
     let active = true
     setError(null)
+    setResponse(null)
     requestChart(chartRequestUrl(regionId, employment))
       .then((data) => {
         if (active) setResponse(data)
@@ -181,9 +198,7 @@ export default function ChartPage({ loadChart: requestChart = loadChart }: Chart
           </div>
         </fieldset>
 
-        {error && <p className="status" role="alert">{error}</p>}
-        {!error && !response && <p className="status" role="status">Loading chart data…</p>}
-        {response && <ChartContent response={response} />}
+        <ChartDataSection error={error} response={response} />
       </section>
     </main>
   )
