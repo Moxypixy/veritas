@@ -1,7 +1,9 @@
 use std::{env, sync::Arc};
 
 use async_trait::async_trait;
-use veritas_api::{ApiError, AppState, AuthVerifier, ChainVerifier, Database, SystemClock, router};
+use veritas_api::{
+    ApiError, AppState, AuthVerifier, ChainVerifier, DataKey, Database, SystemClock, router,
+};
 
 /// The real Kaspa wallet message verifier is intentionally deferred to Task 10.
 /// Starting this binary before then must not turn a supplied wallet string into
@@ -43,11 +45,16 @@ impl ChainVerifier for UnconfiguredChainVerifier {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = env::var("DATABASE_URL")
         .map_err(|_| "DATABASE_URL must name the SQLite database, e.g. sqlite://veritas.db")?;
+    let encoded_data_key =
+        env::var("VERITAS_DATA_KEY").map_err(|_| "VERITAS_DATA_KEY must be set outside tests")?;
+    let data_key = DataKey::from_base64(&encoded_data_key)
+        .map_err(|_| "VERITAS_DATA_KEY must be a base64-encoded 32-byte key")?;
     let database = Database::connect(&database_url)
         .await
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let app = router(AppState::new(
         database,
+        data_key,
         Arc::new(UnconfiguredChainVerifier),
         Arc::new(UnconfiguredAuthVerifier),
         Arc::new(SystemClock),

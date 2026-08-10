@@ -13,7 +13,9 @@ use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use veritas::{VoteAnswer, commitment_hash};
-use veritas_api::{ApiError, AppState, AuthVerifier, ChainVerifier, Database, FixedClock, router};
+use veritas_api::{
+    ApiError, AppState, AuthVerifier, ChainVerifier, DataKey, Database, FixedClock, router,
+};
 
 #[derive(Default)]
 struct FakeChainVerifier {
@@ -64,6 +66,7 @@ async fn test_app(chain: Arc<FakeChainVerifier>) -> axum::Router {
     let clock = FixedClock::new(Utc.with_ymd_and_hms(2026, 8, 10, 12, 0, 0).unwrap());
     router(AppState::new(
         database,
+        DataKey::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=").unwrap(),
         chain,
         Arc::new(AcceptingAuthVerifier),
         Arc::new(clock),
@@ -136,6 +139,19 @@ fn vote_request(answer: &VoteAnswer, commitment: [u8; 32]) -> Value {
         "commitment": hex::encode(commitment),
         "tx_id": "local-runtime-vote"
     })
+}
+
+#[test]
+fn data_key_round_trips_answer_bytes_with_a_fresh_nonce() {
+    let key = DataKey::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=").unwrap();
+    let plaintext = br#"{"region_id":"euro-area"}"#;
+
+    let (ciphertext, nonce) = key.encrypt(plaintext).unwrap();
+    let decrypted = key.decrypt(&nonce, &ciphertext).unwrap();
+
+    assert_ne!(ciphertext, plaintext);
+    assert_eq!(decrypted, plaintext);
+    assert_eq!(nonce.len(), 12);
 }
 
 #[tokio::test]
@@ -263,4 +279,128 @@ async fn aggregates_suppress_all_related_bins_when_one_employment_group_is_sensi
             json!({ "necessities_avg_pct": null, "n": n, "suppressed": true })
         );
     }
+}
+
+#[tokio::test]
+async fn export_requires_a_wallet_bound_session() {
+    let app = test_app(Arc::new(FakeChainVerifier::default())).await;
+
+    let response = app
+        .oneshot(Request::get("/v1/me/export").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn export_decrypts_only_the_session_wallet_answers() {
+    let chain = Arc::new(FakeChainVerifier::default());
+    let app = test_app(chain.clone()).await;
+    let answer = vote("wallet-a", 45, true);
+    let commitment = commitment_hash(&answer).unwrap();
+    chain.insert("wallet-a", "2026-08", commitment);
+    let session = authenticated_session(app.clone(), "wallet-a").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/votes")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::from(
+                    serde_json::to_vec(&vote_request(&answer, commitment)).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/me/export")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        json_response(response).await,
+        json!({
+            "answers": [{
+                "region_id": "euro-area",
+                "necessities_pct": 45,
+                "employed": true,
+                "duration_months": 12,
+                "month_key": "2026-08",
+                "salt": "09090909090909090909090909090909"
+            }]
+        })
+    );
+}
+
+#[tokio::test]
+async fn erase_removes_answers_without_recomputing_aggregate_bins() {
+    let chain = Arc::new(FakeChainVerifier::default());
+    let app = test_app(chain.clone()).await;
+    let answer = vote("wallet-a", 45, true);
+    let commitment = commitment_hash(&answer).unwrap();
+    chain.insert("wallet-a", "2026-08", commitment);
+    let session = authenticated_session(app.clone(), "wallet-a").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/votes")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::from(
+                    serde_json::to_vec(&vote_request(&answer, commitment)).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::delete("/v1/me/answers")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/me/export")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(json_response(response).await, json!({ "answers": [] }));
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/aggregates?region_id=euro-area&month_key=2026-08&employment=all")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        json_response(response).await,
+        json!({ "necessities_avg_pct": null, "n": 1, "suppressed": true })
+    );
 }

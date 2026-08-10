@@ -12,10 +12,16 @@ pub(crate) struct NewVote<'a> {
     pub(crate) month_key: &'a str,
     pub(crate) region_id: &'a str,
     pub(crate) ciphertext: &'a [u8],
+    pub(crate) nonce: &'a [u8],
     pub(crate) commitment: &'a [u8; 32],
     pub(crate) necessities_pct: u8,
     pub(crate) employment: &'a str,
     pub(crate) created_at: &'a str,
+}
+
+pub(crate) struct EncryptedAnswer {
+    pub(crate) ciphertext: Vec<u8>,
+    pub(crate) nonce: Vec<u8>,
 }
 
 impl Database {
@@ -179,7 +185,7 @@ impl Database {
         .bind(vote.month_key)
         .bind(vote.region_id)
         .bind(vote.ciphertext)
-        .bind(Vec::<u8>::new())
+        .bind(vote.nonce)
         .bind(vote.commitment.as_slice())
         .bind(vote.created_at)
         .execute(&mut *tx)
@@ -216,6 +222,34 @@ impl Database {
         tx.commit()
             .await
             .map_err(|_| ApiError::unavailable("could not store vote"))?;
+        Ok(())
+    }
+
+    pub(crate) async fn answers_for_wallet(
+        &self,
+        wallet: &str,
+    ) -> Result<Vec<EncryptedAnswer>, ApiError> {
+        let rows =
+            sqlx::query("SELECT ciphertext, nonce FROM answers WHERE wallet = ? ORDER BY id ASC")
+                .bind(wallet)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|_| ApiError::unavailable("database unavailable"))?;
+        Ok(rows
+            .into_iter()
+            .map(|row| EncryptedAnswer {
+                ciphertext: row.get("ciphertext"),
+                nonce: row.get("nonce"),
+            })
+            .collect())
+    }
+
+    pub(crate) async fn delete_answers_for_wallet(&self, wallet: &str) -> Result<(), ApiError> {
+        sqlx::query("DELETE FROM answers WHERE wallet = ?")
+            .bind(wallet)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| ApiError::unavailable("could not erase answers"))?;
         Ok(())
     }
 

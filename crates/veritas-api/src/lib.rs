@@ -8,7 +8,9 @@
 
 mod aggregates;
 mod auth;
+mod crypto;
 mod db;
+mod gdpr;
 mod submit;
 
 use std::sync::Arc;
@@ -21,6 +23,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 
 pub use auth::AuthVerifier;
+pub use crypto::DataKey;
 pub use db::Database;
 
 #[derive(Debug, Clone)]
@@ -117,6 +120,7 @@ impl Clock for SystemClock {
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) database: Database,
+    pub(crate) data_key: Arc<DataKey>,
     pub(crate) chain_verifier: Arc<dyn ChainVerifier>,
     pub(crate) auth_verifier: Arc<dyn AuthVerifier>,
     pub(crate) clock: Arc<dyn Clock>,
@@ -125,12 +129,14 @@ pub struct AppState {
 impl AppState {
     pub fn new(
         database: Database,
+        data_key: DataKey,
         chain_verifier: Arc<dyn ChainVerifier>,
         auth_verifier: Arc<dyn AuthVerifier>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             database,
+            data_key: Arc::new(data_key),
             chain_verifier,
             auth_verifier,
             clock,
@@ -144,5 +150,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/auth/verify", axum::routing::post(auth::verify))
         .route("/v1/votes", axum::routing::post(submit::submit))
         .route("/v1/aggregates", axum::routing::get(aggregates::get))
+        .route("/v1/me/export", axum::routing::get(gdpr::export))
+        .route("/v1/me/answers", axum::routing::delete(gdpr::erase))
         .with_state(state)
 }
