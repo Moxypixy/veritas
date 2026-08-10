@@ -8,7 +8,7 @@ publish = false
 default-run = "counter"
 
 [workspace]
-members = ["."]
+members = [".", "crates/veritas-api"]
 resolver = "3"
 
 [dependencies]
