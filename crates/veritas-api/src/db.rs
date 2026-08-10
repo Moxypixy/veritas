@@ -45,6 +45,11 @@ impl Database {
         Ok(database)
     }
 
+    #[cfg(test)]
+    pub(crate) fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
     async fn migrate(&self) -> Result<(), ApiError> {
         for statement in [
             "CREATE TABLE IF NOT EXISTS auth_challenges (

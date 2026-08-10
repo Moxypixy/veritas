@@ -357,6 +357,7 @@ pub async fn fetch_region(
     region: &Region,
 ) -> Result<RefreshResult, InflationError> {
     if !region_is_enabled(region) {
+        mark_region_unavailable(pool, &region.id).await?;
         return Ok(RefreshResult::Skipped);
     }
 

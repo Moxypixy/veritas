@@ -27,3 +27,11 @@
 - The chart deliberately omits official lines when the worker records a refresh
   failure, while retaining eligible voter aggregate points.
 - The worker is manual/scheduler-ready; deployment scheduling is outside this task.
+
+## Review follow-up
+
+- A skipped region now persists `official_unavailable: true`, so stale official
+  rows cannot be returned after configuration loses a required series.
+- Added a fixture-backed regression that refreshes a region, removes
+  `prices_energy`, refreshes to `Skipped`, and verifies the chart omits official
+  lines while retaining the unavailable signal.

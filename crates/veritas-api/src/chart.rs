@@ -95,3 +95,124 @@ pub(crate) async fn get(
         series,
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use axum::extract::{Query, State};
+    use chrono::{TimeZone, Utc};
+    use serde_json::json;
+    use veritas_inflation::{HttpClient, RefreshResult, fetch_region, parse_config};
+
+    use super::{ChartQuery, get};
+    use crate::{ApiError, AppState, AuthVerifier, ChainVerifier, DataKey, Database, FixedClock};
+
+    const RECORDED_OECD_RESPONSE: &str =
+        include_str!("../../veritas-inflation/tests/fixtures/oecd-prices.csv");
+
+    struct RecordedHttpClient;
+
+    impl HttpClient for RecordedHttpClient {
+        async fn get(&self, _url: &str) -> Result<String, String> {
+            Ok(RECORDED_OECD_RESPONSE.to_owned())
+        }
+    }
+
+    struct NoopChainVerifier;
+
+    #[async_trait]
+    impl ChainVerifier for NoopChainVerifier {
+        async fn commitment_for_vote(
+            &self,
+            _wallet: &str,
+            _month_key: &str,
+        ) -> Result<Option<[u8; 32]>, ApiError> {
+            Ok(None)
+        }
+    }
+
+    struct NoopAuthVerifier;
+
+    #[async_trait]
+    impl AuthVerifier for NoopAuthVerifier {
+        async fn verify(
+            &self,
+            _wallet: &str,
+            _challenge: &str,
+            _signature: &str,
+        ) -> Result<bool, ApiError> {
+            Ok(false)
+        }
+    }
+
+    #[tokio::test]
+    async fn hides_cached_official_series_after_region_loses_a_required_series() {
+        let config = parse_config(include_str!("../../veritas-inflation/regions.json")).unwrap();
+        let mut region = config
+            .regions
+            .iter()
+            .find(|region| region.id == "united-states")
+            .unwrap()
+            .clone();
+        let database = Database::connect("sqlite::memory:").await.unwrap();
+
+        assert_eq!(
+            fetch_region(
+                &RecordedHttpClient,
+                database.pool(),
+                &config.source,
+                &region
+            )
+            .await
+            .unwrap(),
+            RefreshResult::Updated
+        );
+
+        region.series.retain(|series| series.key != "prices_energy");
+        assert_eq!(
+            fetch_region(
+                &RecordedHttpClient,
+                database.pool(),
+                &config.source,
+                &region
+            )
+            .await
+            .unwrap(),
+            RefreshResult::Skipped
+        );
+
+        let state = AppState::new(
+            database,
+            DataKey::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=").unwrap(),
+            Arc::new(NoopChainVerifier),
+            Arc::new(NoopAuthVerifier),
+            Arc::new(FixedClock::new(
+                Utc.with_ymd_and_hms(2026, 8, 10, 12, 0, 0).unwrap(),
+            )),
+        );
+        let response = get(
+            State(state),
+            Query(ChartQuery {
+                region_id: "united-states".into(),
+                employment: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            serde_json::to_value(response.0).unwrap(),
+            json!({
+                "region_id": "united-states",
+                "official_unavailable": true,
+                "series": [{
+                    "key": "voters_necessities",
+                    "label": "What voters say they spend on necessities",
+                    "points": []
+                }]
+            })
+        );
+    }
+}
