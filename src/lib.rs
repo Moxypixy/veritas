@@ -1,8 +1,10 @@
 mod commitment;
+mod vote_flow;
 
 pub use commitment::{
     COMMITMENT_DOMAIN, CommitmentError, VoteAnswer, canonical_bytes, commitment_hash,
 };
+pub use vote_flow::{LocalVoteFixture, load_pulse_artifact};
 
 use kaspa_consensus_core::{
     hashing::{
