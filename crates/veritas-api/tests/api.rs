@@ -281,7 +281,7 @@ async fn insecure_verifier_creates_session_for_non_empty_signature() {
         }),
     )
     .await;
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

@@ -139,11 +139,10 @@ pub(crate) async fn verify(
 ) -> Result<Json<VerifyResponse>, ApiError> {
     if request.wallet.trim().is_empty()
         || request.nonce.trim().is_empty()
-        || request.signature.trim().is_empty()
         || request.public_key.trim().is_empty()
     {
         return Err(ApiError::bad_request(
-            "wallet, nonce, signature, and public_key are required",
+            "wallet, nonce, and public_key are required",
         ));
     }
 
