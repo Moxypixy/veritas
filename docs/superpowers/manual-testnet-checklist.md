@@ -7,12 +7,12 @@ This application is testnet-only. Do not use a mainnet wallet, seed phrase, or p
 1. Set process environment variables from `.env.example` (Vite may read a local ignored `.env`; the Rust API launcher must receive exported environment variables) and set `VERITAS_KASPA_NETWORK=kaspa_testnet_10`.
 2. Configure `VERITAS_KASPA_RPC_URL` with an operator-controlled Testnet-10 RPC endpoint.
 3. Start the API with a separately generated `VERITAS_DATA_KEY`; do not put it in the browser or commit it.
-4. Install KasWare (or a wallet that provides the documented `window.kasware` API), fund a **Testnet-10** account only, and confirm it reports `kaspa_testnet_10`.
+4. Install **Kastle**, fund a **Testnet-10** account via `https://faucet-tn10.kaspanet.io/` using the `kaspatest:…` address, and confirm Kastle reports network `testnet-10`. (Operator env uses `VERITAS_KASPA_NETWORK=kaspa_testnet_10`; the wallet network id is Kastle’s `testnet-10`.)
 
 ## Wallet login
 
-1. Open the Vote page and select **Connect Kaspa Testnet-10 wallet**.
-2. Confirm the wallet connection prompt and, if requested, its Testnet-10 switch.
+1. Open the Vote page and select **Connect Kastle (Testnet-10)**.
+2. Approve the Kastle connection prompt and, if requested, its Testnet-10 network switch.
 3. Inspect the login message: it must name `Veritas`, the displayed wallet, a nonce, and an expiry.
 4. Approve the message signature only after inspecting it. Reject once and confirm the page says no signature or transaction was submitted.
 5. With a valid verifier configured, confirm a session is created for the same wallet; attempt a modified signature and confirm the API returns `401 wallet signature is invalid`.
@@ -28,4 +28,4 @@ This application is testnet-only. Do not use a mainnet wallet, seed phrase, or p
 
 ## Current integration limit
 
-The repository currently has no live Testnet-10 covenant transaction builder or server-side KasWare signature-verification protocol implementation. The UI therefore stops at review and the production API rejects wallet authentication/chain verification rather than accepting an unverified signature or silently broadcasting. Use the automated mock tests for the interface until those verified integrations are supplied.
+The repository currently has no live Testnet-10 covenant transaction builder or server-side Kastle message-verification protocol implementation. The UI therefore stops at review and the production API rejects wallet authentication/chain verification rather than accepting an unverified signature or silently broadcasting (fail-closed). Use the automated mock tests for the interface until those verified integrations are supplied.

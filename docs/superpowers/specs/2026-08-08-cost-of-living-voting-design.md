@@ -230,7 +230,7 @@ Follow Veritas `agents.md`: Argent source of truth is the local Argent checkout;
 
 - Exact deposit amount (testnet KAS)
 - Exact grace period and abandoned-deposit handling
-- Wallet connector set (which testnet wallets)
+- Wallet connector set: **Kastle** on **Testnet-10** (`window.kastle`; see `2026-08-11-kastle-testnet-wallet-design.md`)
 - Final region list and official series mapping
 - Encryption scheme for indexer payloads (wallet-keyed or server envelope + wallet auth)
 - Argent actor/state shape (to be derived from current Argent `master` / examples, not assumed)
