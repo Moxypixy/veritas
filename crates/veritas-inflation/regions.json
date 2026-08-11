@@ -18,6 +18,42 @@
       ]
     },
     {
+      "id": "united-states",
+      "label": "United States",
+      "source_area": "USA",
+      "measure": "CPI",
+      "series": [
+        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "USA.M.N.CPI.PA._T.N.GY" },
+        { "key": "prices_food", "label": "Food prices", "series_key": "USA.M.N.CPI.PA.CP01.N.GY" },
+        { "key": "prices_housing", "label": "Housing costs", "series_key": "USA.M.N.CPI.PA.CP04.N.GY" },
+        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "USA.M.N.CPI.PA.CP045.N.GY" }
+      ]
+    },
+    {
+      "id": "united-kingdom",
+      "label": "United Kingdom",
+      "source_area": "GBR",
+      "measure": "CPI",
+      "series": [
+        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "GBR.M.N.CPI.PA._T.N.GY" },
+        { "key": "prices_food", "label": "Food prices", "series_key": "GBR.M.N.CPI.PA.CP01.N.GY" },
+        { "key": "prices_housing", "label": "Housing costs", "series_key": "GBR.M.N.CPI.PA.CP04.N.GY" },
+        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "GBR.M.N.CPI.PA.CP045.N.GY" }
+      ]
+    },
+    {
+      "id": "japan",
+      "label": "Japan",
+      "source_area": "JPN",
+      "measure": "CPI",
+      "series": [
+        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "JPN.M.N.CPI.PA._T.N.GY" },
+        { "key": "prices_food", "label": "Food prices", "series_key": "JPN.M.N.CPI.PA.CP01.N.GY" },
+        { "key": "prices_housing", "label": "Housing costs", "series_key": "JPN.M.N.CPI.PA.CP04.N.GY" },
+        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "JPN.M.N.CPI.PA.CP045.N.GY" }
+      ]
+    },
+    {
       "id": "austria",
       "label": "Austria",
       "source_area": "AUT",

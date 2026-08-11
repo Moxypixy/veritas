@@ -53,3 +53,23 @@ fn region_requires_label() {
 
     assert!(regions.iter().all(|region| !region.label.is_empty()));
 }
+
+#[test]
+fn preserves_previously_shipped_regions_after_verification() {
+    let regions = parse_regions(include_str!("../regions.json")).unwrap();
+    let region_ids: Vec<_> = regions.iter().map(|region| region.id.as_str()).collect();
+
+    assert_eq!(
+        region_ids,
+        [
+            "euro-area",
+            "united-states",
+            "united-kingdom",
+            "japan",
+            "austria",
+            "belgium",
+            "switzerland",
+            "chile",
+        ]
+    );
+}

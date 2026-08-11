@@ -1,7 +1,12 @@
+use std::time::Duration;
+
 use veritas_inflation::{
     ConfiguredSeries, HttpClient, Region, ReqwestHttpClient, SourceConfig, parse_config,
     parse_oecd_csv,
 };
+
+const REQUEST_DELAY: Duration = Duration::from_secs(1);
+const MAX_TRANSIENT_ATTEMPTS: usize = 3;
 
 const CANDIDATES: &[Candidate] = &[
     Candidate::hicp("euro-area", "Euro area", "EA20"),
@@ -107,21 +112,28 @@ async fn main() {
     let config = parse_config(include_str!("../../regions.json"))
         .expect("the checked-in regions file must contain a valid source configuration");
     let client = ReqwestHttpClient::default();
-    let mut passed = Vec::new();
+    // Preserve regions already known to be good. A 429 only means that this
+    // verification run was rate-limited, never that a published series vanished.
+    let mut regions = config.regions.clone();
 
     for candidate in CANDIDATES {
         let region = candidate.to_region();
         match verify_region(&client, &config.source, &region).await {
             Ok(()) => {
                 println!("PASS {}", region.id);
-                passed.push(region);
+                if !regions.iter().any(|existing| existing.id == region.id) {
+                    regions.push(region);
+                }
+            }
+            Err(error) if is_inconclusive_error(&error) => {
+                println!("INCONCLUSIVE {}: {error}", region.id);
             }
             Err(error) => println!("FAIL {}: {error}", region.id),
         }
     }
 
     println!("\nVerified regions.json:");
-    println!("{}", regions_json(&config.source, &passed));
+    println!("{}", regions_json(&config.source, &regions));
 }
 
 async fn verify_region(
@@ -135,13 +147,47 @@ async fn verify_region(
             source.base_url.trim_end_matches('/'),
             series.series_key
         );
-        let body = client.get(&url).await?;
+        let body = get_with_transient_retries(client, &url).await?;
         let points = parse_oecd_csv(&body).map_err(|error| error.to_string())?;
         if points.is_empty() {
             return Err(format!("{} returned no YYYY-MM points", series.key));
         }
+        tokio::time::sleep(REQUEST_DELAY).await;
     }
     Ok(())
+}
+
+async fn get_with_transient_retries(
+    client: &ReqwestHttpClient,
+    url: &str,
+) -> Result<String, String> {
+    let mut attempt = 0;
+
+    loop {
+        match client.get(url).await {
+            Ok(body) => return Ok(body),
+            Err(error) if is_inconclusive_error(&error) && attempt + 1 < MAX_TRANSIENT_ATTEMPTS => {
+                attempt += 1;
+                let backoff = REQUEST_DELAY * attempt as u32;
+                eprintln!(
+                    "Transient OECD error; retrying request {attempt}/{MAX_TRANSIENT_ATTEMPTS} after {}s: {error}",
+                    backoff.as_secs()
+                );
+                tokio::time::sleep(backoff).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn is_inconclusive_error(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("429")
+        || error.contains("error sending request")
+        || error.contains("request or response body error")
+        || error.contains("operation timed out")
+        || error.contains("connection error")
+        || error.contains("dns error")
 }
 
 fn regions_json(source: &SourceConfig, regions: &[Region]) -> String {
@@ -170,4 +216,20 @@ fn regions_json(source: &SourceConfig, regions: &[Region]) -> String {
         "regions": regions,
     }))
     .expect("regions are serializable")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_inconclusive_error;
+
+    #[test]
+    fn treats_rate_limits_and_network_failures_as_inconclusive() {
+        assert!(is_inconclusive_error(
+            "HTTP status client error (429 Too Many Requests)"
+        ));
+        assert!(is_inconclusive_error("error sending request for url"));
+        assert!(!is_inconclusive_error(
+            "HTTP status client error (404 Not Found)"
+        ));
+    }
 }
