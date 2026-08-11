@@ -31,6 +31,7 @@ fn keeps_only_regions_with_all_required_plain_language_series() {
         },
         "regions": [{
             "id": "missing-energy",
+            "label": "Missing Energy",
             "source_area": "XXX",
             "measure": "CPI",
             "series": [
@@ -43,4 +44,12 @@ fn keeps_only_regions_with_all_required_plain_language_series() {
     let incomplete_region = &parse_regions(incomplete).unwrap()[0];
 
     assert!(!region_is_enabled(incomplete_region));
+}
+
+#[test]
+fn region_requires_label() {
+    let json = include_str!("../regions.json");
+    let regions = parse_regions(json).unwrap();
+
+    assert!(regions.iter().all(|region| !region.label.is_empty()));
 }

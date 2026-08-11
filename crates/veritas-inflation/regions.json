@@ -7,6 +7,7 @@
   "regions": [
     {
       "id": "euro-area",
+      "label": "Euro area",
       "source_area": "EA20",
       "measure": "HICP",
       "series": [
@@ -17,36 +18,51 @@
       ]
     },
     {
-      "id": "united-states",
-      "source_area": "USA",
+      "id": "austria",
+      "label": "Austria",
+      "source_area": "AUT",
       "measure": "CPI",
       "series": [
-        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "USA.M.N.CPI.PA._T.N.GY" },
-        { "key": "prices_food", "label": "Food prices", "series_key": "USA.M.N.CPI.PA.CP01.N.GY" },
-        { "key": "prices_housing", "label": "Housing costs", "series_key": "USA.M.N.CPI.PA.CP04.N.GY" },
-        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "USA.M.N.CPI.PA.CP045.N.GY" }
+        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "AUT.M.N.CPI.PA._T.N.GY" },
+        { "key": "prices_food", "label": "Food prices", "series_key": "AUT.M.N.CPI.PA.CP01.N.GY" },
+        { "key": "prices_housing", "label": "Housing costs", "series_key": "AUT.M.N.CPI.PA.CP04.N.GY" },
+        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "AUT.M.N.CPI.PA.CP045.N.GY" }
       ]
     },
     {
-      "id": "united-kingdom",
-      "source_area": "GBR",
+      "id": "belgium",
+      "label": "Belgium",
+      "source_area": "BEL",
       "measure": "CPI",
       "series": [
-        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "GBR.M.N.CPI.PA._T.N.GY" },
-        { "key": "prices_food", "label": "Food prices", "series_key": "GBR.M.N.CPI.PA.CP01.N.GY" },
-        { "key": "prices_housing", "label": "Housing costs", "series_key": "GBR.M.N.CPI.PA.CP04.N.GY" },
-        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "GBR.M.N.CPI.PA.CP045.N.GY" }
+        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "BEL.M.N.CPI.PA._T.N.GY" },
+        { "key": "prices_food", "label": "Food prices", "series_key": "BEL.M.N.CPI.PA.CP01.N.GY" },
+        { "key": "prices_housing", "label": "Housing costs", "series_key": "BEL.M.N.CPI.PA.CP04.N.GY" },
+        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "BEL.M.N.CPI.PA.CP045.N.GY" }
       ]
     },
     {
-      "id": "japan",
-      "source_area": "JPN",
+      "id": "switzerland",
+      "label": "Switzerland",
+      "source_area": "CHE",
       "measure": "CPI",
       "series": [
-        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "JPN.M.N.CPI.PA._T.N.GY" },
-        { "key": "prices_food", "label": "Food prices", "series_key": "JPN.M.N.CPI.PA.CP01.N.GY" },
-        { "key": "prices_housing", "label": "Housing costs", "series_key": "JPN.M.N.CPI.PA.CP04.N.GY" },
-        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "JPN.M.N.CPI.PA.CP045.N.GY" }
+        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "CHE.M.N.CPI.PA._T.N.GY" },
+        { "key": "prices_food", "label": "Food prices", "series_key": "CHE.M.N.CPI.PA.CP01.N.GY" },
+        { "key": "prices_housing", "label": "Housing costs", "series_key": "CHE.M.N.CPI.PA.CP04.N.GY" },
+        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "CHE.M.N.CPI.PA.CP045.N.GY" }
+      ]
+    },
+    {
+      "id": "chile",
+      "label": "Chile",
+      "source_area": "CHL",
+      "measure": "CPI",
+      "series": [
+        { "key": "prices_overall", "label": "How fast prices are rising overall", "series_key": "CHL.M.N.CPI.PA._T.N.GY" },
+        { "key": "prices_food", "label": "Food prices", "series_key": "CHL.M.N.CPI.PA.CP01.N.GY" },
+        { "key": "prices_housing", "label": "Housing costs", "series_key": "CHL.M.N.CPI.PA.CP04.N.GY" },
+        { "key": "prices_energy", "label": "Energy / fuel prices", "series_key": "CHL.M.N.CPI.PA.CP045.N.GY" }
       ]
     }
   ]

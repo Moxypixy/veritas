@@ -15,6 +15,7 @@ pub const REQUIRED_SERIES_KEYS: [&str; 4] = [
 #[derive(Debug, Clone, PartialEq)]
 pub struct Region {
     pub id: String,
+    pub label: String,
     pub source_area: String,
     pub measure: String,
     pub series: Vec<ConfiguredSeries>,
@@ -90,6 +91,7 @@ impl<'de> Deserialize<'de> for Region {
         #[derive(Deserialize)]
         struct RegionWire {
             id: String,
+            label: String,
             source_area: String,
             measure: String,
             series: Vec<ConfiguredSeries>,
@@ -98,6 +100,7 @@ impl<'de> Deserialize<'de> for Region {
         let wire = RegionWire::deserialize(deserializer)?;
         Ok(Self {
             id: wire.id,
+            label: wire.label,
             source_area: wire.source_area,
             measure: wire.measure,
             series: wire.series,
@@ -127,6 +130,7 @@ pub fn region_is_enabled(region: &Region) -> bool {
         .collect();
 
     !region.id.is_empty()
+        && !region.label.is_empty()
         && REQUIRED_SERIES_KEYS
             .iter()
             .all(|required| configured_keys.contains(required))
