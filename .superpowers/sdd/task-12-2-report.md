@@ -42,7 +42,8 @@ per-region failures and retained only the verified subset.
 
 ## Fix verification
 
-- `cargo test -p veritas-inflation --all-features` — 7 tests passed.
+- `cargo test -p veritas-inflation --all-features` — 7 tests passed (run again
+  after the final test update).
 - `cargo fmt --all -- --check` — passed before final formatting; source was
   then formatted with `cargo fmt --all`.
 - `cargo clippy -p veritas-inflation --all-targets --all-features -- -D warnings`
