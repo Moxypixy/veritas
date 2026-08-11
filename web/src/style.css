@@ -15,16 +15,17 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .page { width: min(100% - 2rem, 48rem); margin: 0 auto; padding: 3rem 0; }
-.site-nav { display: flex; gap: 1rem; margin-bottom: 2rem; }
-.site-nav a { color: #15543e; font-weight: 700; padding: .5rem .75rem; }
-.site-nav a[aria-current="page"] { background: #dcece2; border-radius: .375rem; color: #102f23; text-decoration-thickness: .15em; }
 .hero { margin-bottom: 2rem; }
+.chart-panel, .vote-section { margin-top: 2.5rem; }
+.section-heading { margin-bottom: 1rem; }
 .eyebrow { color: #315f4f; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: .82rem; }
 h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; margin: .5rem 0 1rem; }
 h2 { font-size: 1.25rem; margin: 0 0 .75rem; }
+h3 { font-size: 1.1rem; margin: 0 0 .75rem; }
 p { line-height: 1.55; }
 
 .card { background: #fff; border: 1px solid #b8c6bf; border-radius: .75rem; box-shadow: 0 2px 8px rgb(0 0 0 / .08); padding: clamp(1.25rem, 4vw, 2rem); }
+.card + .card { margin-top: 1.5rem; }
 .facts { margin: 0; }
 .facts > div { border-top: 1px solid #d5dfd9; padding: 1rem 0; }
 .facts > div:last-child { padding-bottom: 0; }

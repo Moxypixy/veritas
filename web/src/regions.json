@@ -1,0 +1,12 @@
+{
+  "regions": [
+    { "id": "euro-area", "label": "Euro area" },
+    { "id": "united-states", "label": "United States" },
+    { "id": "united-kingdom", "label": "United Kingdom" },
+    { "id": "japan", "label": "Japan" },
+    { "id": "austria", "label": "Austria" },
+    { "id": "belgium", "label": "Belgium" },
+    { "id": "switzerland", "label": "Switzerland" },
+    { "id": "chile", "label": "Chile" }
+  ]
+}
