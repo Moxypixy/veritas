@@ -8,6 +8,7 @@
 
 1. Expand Veritas voting/chart regions from the fixed four to **every OECD CPI area that verifies** for the required official series.
 2. Unblock local end-to-end UI testing with Kastle by adding an **explicitly gated insecure auth verifier** — without weakening the production default fail-closed posture.
+3. Put the **chart and full vote form on one page** (chart on top, form underneath), removing the confusing Vote/Chart split.
 
 ## 2. Decisions locked
 
@@ -19,10 +20,11 @@
 | Dev-login button | No — Kastle `connect` / `signMessage` still required |
 | Real Schnorr/Kastle crypto verify | Out of scope (later) |
 | Covenant tx broadcast | Out of scope (still unavailable) |
+| Page layout | Single page: chart on top, full vote form underneath; remove Vote/Chart split nav |
 
 ## 3. Architecture
 
-Two independent changes on the current stack:
+Three related changes on the current stack:
 
 ### 3.1 Regions
 
@@ -54,13 +56,22 @@ Browser (Kastle) --signMessage--> API /v1/auth/verify
                     flag set   --> InsecureAcceptingAuthVerifier (non-empty sig+pubkey)
 ```
 
+### 3.3 Single-page chart + vote UI
+
+- Remove the Vote / Chart primary nav split (`/` vs `/chart`). One main page serves both.
+- Vertical order: **chart section first**, **full vote form underneath** (consent → survey → wallet → review).
+- Chart’s employed / unemployed / all control remains a **chart aggregate filter**, not part of the vote form’s employment question. Keep labels clear so the two are not confused.
+- Region lists for chart filters and the vote form come from the same OECD-verified source of truth. Optional later polish: syncing the selected region between chart and form is nice-to-have, not required for v1 of this change.
+- Prefer composing existing `ChartContent` / chart loaders into `App` rather than maintaining two competing page shells. Keep `/chart` as a redirect to `/` or drop it.
+- Accessibility: one document landmark structure; chart and form each keep their headings; keyboard order follows visual order (chart → form).
+
 ## 4. Files (expected)
 
 | Area | Likely touch |
 |------|----------------|
 | Regions config | `crates/veritas-inflation/regions.json` |
 | Verification tooling | inflation crate and/or a small discover/verify helper |
-| Web UI | `web/src/App.tsx`, `web/src/pages/ChartPage.tsx`, shared regions module |
+| Web UI | `web/src/App.tsx`, `web/src/pages/ChartPage.tsx` (compose into App), shared regions module, `web/src/style.css` |
 | Auth | `crates/veritas-api/src/main.rs`, auth tests, `.env.example` |
 | Docs | `docs/superpowers/manual-testnet-checklist.md`; design open-point / plan region wording |
 
@@ -77,7 +88,8 @@ Browser (Kastle) --signMessage--> API /v1/auth/verify
 2. Open web (Vite proxy to API); Connect Kastle (Testnet-10); approve connect + message sign.
 3. Confirm session shows the same `kaspatest:…` address.
 4. Confirm vote/chart region lists include expanded OECD areas (not only the original four).
-5. Restart API without the flag; confirm login fails closed again.
+5. Confirm one page shows chart above and the full vote form below (no separate Chart nav required).
+6. Restart API without the flag; confirm login fails closed again.
 
 ## 6. Out of scope
 
@@ -92,3 +104,4 @@ Browser (Kastle) --signMessage--> API /v1/auth/verify
 - Local insecure auth works behind `VERITAS_ALLOW_INSECURE_AUTH=1` with real Kastle signing.
 - Production default remains fail-closed.
 - Docs warn clearly that the insecure flag is local-only.
+- Chart and full vote form live on one page (chart above, form below); split Vote/Chart navigation is gone.
