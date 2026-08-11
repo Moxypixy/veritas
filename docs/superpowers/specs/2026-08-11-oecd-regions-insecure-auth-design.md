@@ -1,8 +1,10 @@
 # OECD regions expansion + local insecure wallet auth
 
 **Date:** 2026-08-11  
-**Status:** Approved for planning  
+**Status:** Implemented  
 **Related:** Cost-of-Living Pulse; Kastle Testnet-10 connector
+
+Shipped on branch `step-12-oecd-auth-single-page`: expanded OECD regions, `VERITAS_ALLOW_INSECURE_AUTH=1` for local login testing, and single-page chart-above-form layout.
 
 ## 1. Goal
 

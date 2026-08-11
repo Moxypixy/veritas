@@ -23,7 +23,7 @@ Working product name: **Cost-of-Living Pulse**.
 
 - Wallet-authenticated monthly survey submission
 - Fields: region, necessities % of wage (0–100), employed yes/no, duration in months (for both employed and unemployed)
-- Fixed region list limited to places with free official statistics for overall prices plus food, housing, and energy (or closest equivalents)
+- Region list = all OECD areas verified for required series (see inflation `regions.json`)
 - Chart: official series as lines, juxtaposed with voters’ monthly average necessities %; filter All / Employed / Unemployed
 - Plain-language labels for every series (no unexplained CPI jargon in the primary UI)
 - On-chain: deposit lock/release + one-vote-per-month + commitment hash
@@ -176,7 +176,7 @@ Clear notice covering:
 - Map technical series names to plain-language labels in the API so the UI never requires CPI literacy.
 - If a feed fails: show vote line if available; mark official lines unavailable.
 
-Exact region list and series IDs are fixed in the implementation plan after source verification.
+Regions are all OECD areas verified for required series; see inflation `regions.json` for the shipped list and series mapping.
 
 ## 9. Components
 
@@ -231,6 +231,6 @@ Follow Veritas `agents.md`: Argent source of truth is the local Argent checkout;
 - Exact deposit amount (testnet KAS)
 - Exact grace period and abandoned-deposit handling
 - Wallet connector set: **Kastle** on **Testnet-10** (`window.kastle`; see `2026-08-11-kastle-testnet-wallet-design.md`)
-- Final region list and official series mapping
+- ~~Final region list and official series mapping~~ (resolved: all OECD areas verified for required series; see inflation `regions.json`)
 - Encryption scheme for indexer payloads (wallet-keyed or server envelope + wallet auth)
 - Argent actor/state shape (to be derived from current Argent `master` / examples, not assumed)
