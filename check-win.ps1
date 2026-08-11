@@ -20,4 +20,16 @@ Invoke-Native -Command "cargo" -Arguments @("check", "--all-targets", "--all-fea
 Invoke-Native -Command "cargo" -Arguments @("test", "--all-targets", "--all-features")
 Invoke-Native -Command "cargo" -Arguments @("clippy", "--all-targets", "--all-features", "--", "-D", "warnings")
 Invoke-Native -Command "cargo" -Arguments @("run", "--quiet", "--bin", "counter")
+
+if (Test-Path -Path "web" -PathType Container) {
+    Push-Location "web"
+    try {
+        Invoke-Native -Command "npm" -Arguments @("run", "lint")
+        Invoke-Native -Command "npm" -Arguments @("test")
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 Invoke-Native -Command "git" -Arguments @("diff", "--check")

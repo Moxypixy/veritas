@@ -29,3 +29,27 @@ This application is testnet-only. Do not use a mainnet wallet, seed phrase, or p
 ## Current integration limit
 
 The repository currently has no live Testnet-10 covenant transaction builder or server-side Kastle message-verification protocol implementation. The UI therefore stops at review and the production API rejects wallet authentication/chain verification rather than accepting an unverified signature or silently broadcasting (fail-closed). Use the automated mock tests for the interface until those verified integrations are supplied.
+
+## Verification results — 2026-08-11
+
+### Automated gate
+
+| Command | Outcome | Evidence |
+| --- | --- | --- |
+| `.\check-win.ps1` | PASS | Rust formatting, workspace check, tests, Clippy with warnings denied, Counter local-runtime smoke, web lint, web tests, and `git diff --check` completed successfully. The local rule suite passed 5 tests, including duplicate-vote rejection and next-month reclaim. Web tests passed 11 tests in 3 files. |
+| `cd web; npm test; npm run lint; npm run build` | PASS | 11 Vitest tests in 3 files passed; TypeScript lint passed; Vite production build completed successfully. |
+
+### Manual Testnet-10 wallet results
+
+Not run / pending. This environment has no configured operator-controlled Testnet-10 RPC endpoint, funded Kastle Testnet-10 account, or verified live covenant transaction builder and server-side Kastle signature verifier. The fail-closed integration limit above remains in effect; no manual wallet, signature, transaction, broadcast, or confirmation result is claimed.
+
+### Success criteria evidence
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| Connect, consent, vote, and see the deposit locked | PENDING MANUAL | The Kastle Testnet-10 steps above were not run. Local runtime checks cover the vote/deposit path, but do not prove a live wallet handoff or broadcast. |
+| A second vote in the same month fails | PASS (local runtime) / PENDING MANUAL | `tests/vote_local_rules.rs` rejection test passed through `.\check-win.ps1`. |
+| Next-month deposit reclaim succeeds | PASS (local runtime) / PENDING MANUAL | `tests/vote_local_rules.rs` reclaim test passed through `.\check-win.ps1`. |
+| Chart has plain-language series and employed filter | PASS (automated) | API and web chart tests passed through the verification gate; the web filter request test covers the employed/unemployed selection. |
+| Erase removes off-chain data while the commitment remains | PASS (automated) / PENDING LIVE-CHAIN CONFIRMATION | API erase test passed through the verification gate. `ag/vote.ag` stores the commitment in `VoteDepositState`; no live Testnet-10 chain record was created to inspect. |
+| No bulky full answers are stored on-chain | PASS (source review) | `ag/vote.ag` accepts and stores only `commitment: byte[32]` in `VoteDepositState`; it has no full-answer field. |
