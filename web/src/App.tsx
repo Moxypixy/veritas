@@ -2,7 +2,14 @@ import { useState, type FormEvent } from 'react'
 
 import { commitmentHash } from './commitment'
 import { walletAuthApi } from './wallet/api'
-import { connectAndAuthenticate, getKaswareProvider, walletErrorMessage, type WalletSession } from './wallet/kasware'
+import {
+  TESTNET_FAUCET_URL,
+  connectAndAuthenticate,
+  getKastleProvider,
+  missingWalletMessage,
+  walletErrorMessage,
+  type WalletSession,
+} from './wallet/kastle'
 import ChartPage from './pages/ChartPage'
 
 const REGIONS = [
@@ -65,9 +72,9 @@ function VotePage() {
   }
 
   async function connectWallet() {
-    const provider = getKaswareProvider()
+    const provider = getKastleProvider()
     if (!provider) {
-      setMessage('No compatible Kaspa wallet was found. Install KasWare or open a wallet browser that provides window.kasware.')
+      setMessage(missingWalletMessage())
       return
     }
     setWalletBusy(true)
@@ -75,7 +82,9 @@ function VotePage() {
     try {
       const session = await connectAndAuthenticate(provider, walletAuthApi)
       setWalletSession(session)
-      setMessage(`Wallet authenticated for ${session.wallet}.`)
+      setMessage(
+        `Wallet authenticated for ${session.wallet}. Fund Testnet-10 at ${TESTNET_FAUCET_URL} if the balance is empty.`,
+      )
     } catch (error) {
       setMessage(walletErrorMessage(error))
     } finally {
@@ -159,7 +168,7 @@ function VotePage() {
           <h2 id="deposit-heading">Testnet deposit: 0.1 KAS</h2>
           <p>Before a transaction can be signed, you will see its destination, 0.1 KAS deposit, and commitment. Your wallet asks for approval; this app does not receive private keys or seed phrases.</p>
           <button type="button" className="secondary" onClick={connectWallet} disabled={walletBusy}>
-            {walletBusy ? 'Connecting wallet…' : walletSession ? 'Wallet authenticated' : 'Connect Kaspa Testnet-10 wallet'}
+            {walletBusy ? 'Connecting wallet…' : walletSession ? 'Wallet authenticated' : 'Connect Kastle (Testnet-10)'}
           </button>
           {walletSession && <p className="help">Connected: {walletSession.wallet}</p>}
         </section>
