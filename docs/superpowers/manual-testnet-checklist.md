@@ -13,7 +13,7 @@ This application is testnet-only. Do not use a mainnet wallet, seed phrase, or p
 ## UI layout and regions
 
 1. Confirm one page shows the chart on top and the full vote form below (no separate Vote/Chart navigation).
-2. Confirm region dropdowns list expanded OECD areas (from shared `regions.json`), not only the original four.
+2. Confirm region dropdowns list expanded OECD areas (from shared `regions.json`), not only the original four. When changing regions, update both `web/src/regions.json` and `crates/veritas-inflation/regions.json`; the web Vitest suite enforces their ordered `{id, label}` lists match.
 
 ## Wallet login
 

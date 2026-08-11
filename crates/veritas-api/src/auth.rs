@@ -13,7 +13,8 @@ use crate::{ApiError, AppState};
 /// Kaspa wallet message formats are integrated in Task 10. The production
 /// binary deliberately installs a rejecting verifier until that work exists;
 /// accepting a wallet identifier without a verified signature would make
-/// wallet-bound sessions forgeable.
+/// wallet-bound sessions forgeable. `VERITAS_ALLOW_INSECURE_AUTH=1` enables
+/// the accepting verifier only for explicit local testing.
 #[async_trait]
 pub trait AuthVerifier: Send + Sync {
     async fn verify(
@@ -183,7 +184,54 @@ pub(crate) async fn verify(
 
 #[cfg(test)]
 mod tests {
-    use super::{AuthVerifier, InsecureAcceptingAuthVerifier};
+    use std::{
+        ffi::OsString,
+        sync::{Mutex, OnceLock},
+    };
+
+    use super::{AuthVerifier, InsecureAcceptingAuthVerifier, insecure_auth_enabled};
+
+    static INSECURE_AUTH_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    struct InsecureAuthEnvRestore(Option<OsString>);
+
+    impl Drop for InsecureAuthEnvRestore {
+        fn drop(&mut self) {
+            // Tests hold INSECURE_AUTH_ENV_LOCK while mutating this process-global value.
+            unsafe {
+                match self.0.as_ref() {
+                    Some(value) => std::env::set_var("VERITAS_ALLOW_INSECURE_AUTH", value),
+                    None => std::env::remove_var("VERITAS_ALLOW_INSECURE_AUTH"),
+                }
+            }
+        }
+    }
+
+    fn insecure_auth_enabled_with_env(value: Option<&str>) -> bool {
+        let _lock = INSECURE_AUTH_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("insecure auth environment lock must not be poisoned");
+        let _restore = InsecureAuthEnvRestore(std::env::var_os("VERITAS_ALLOW_INSECURE_AUTH"));
+        unsafe {
+            match value {
+                Some(value) => std::env::set_var("VERITAS_ALLOW_INSECURE_AUTH", value),
+                None => std::env::remove_var("VERITAS_ALLOW_INSECURE_AUTH"),
+            }
+        }
+        insecure_auth_enabled()
+    }
+
+    #[test]
+    fn insecure_auth_environment_is_explicitly_opt_in() {
+        for value in [None, Some("0"), Some("true")] {
+            assert!(
+                !insecure_auth_enabled_with_env(value),
+                "{value:?} must not enable insecure authentication"
+            );
+        }
+        assert!(insecure_auth_enabled_with_env(Some("1")));
+    }
 
     #[tokio::test]
     async fn insecure_verifier_accepts_non_empty_signature_and_public_key() {
