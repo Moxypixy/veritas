@@ -23,7 +23,10 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 
-pub use auth::AuthVerifier;
+pub use auth::{
+    AuthVerifier, InsecureAcceptingAuthVerifier, UnconfiguredAuthVerifier, auth_verifier_from_env,
+    insecure_auth_enabled,
+};
 pub use crypto::DataKey;
 pub use db::Database;
 

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::Duration;
@@ -21,6 +23,53 @@ pub trait AuthVerifier: Send + Sync {
         signature: &str,
         public_key: &str,
     ) -> Result<bool, ApiError>;
+}
+
+pub struct UnconfiguredAuthVerifier;
+
+#[async_trait]
+impl AuthVerifier for UnconfiguredAuthVerifier {
+    async fn verify(
+        &self,
+        _wallet: &str,
+        _challenge: &str,
+        _signature: &str,
+        _public_key: &str,
+    ) -> Result<bool, ApiError> {
+        Err(ApiError::unavailable(
+            "wallet authentication is not configured",
+        ))
+    }
+}
+
+pub struct InsecureAcceptingAuthVerifier;
+
+#[async_trait]
+impl AuthVerifier for InsecureAcceptingAuthVerifier {
+    async fn verify(
+        &self,
+        _wallet: &str,
+        _challenge: &str,
+        signature: &str,
+        public_key: &str,
+    ) -> Result<bool, ApiError> {
+        Ok(!signature.trim().is_empty() && !public_key.trim().is_empty())
+    }
+}
+
+pub fn insecure_auth_enabled() -> bool {
+    std::env::var("VERITAS_ALLOW_INSECURE_AUTH").as_deref() == Ok("1")
+}
+
+pub fn auth_verifier_from_env() -> Arc<dyn AuthVerifier> {
+    if insecure_auth_enabled() {
+        eprintln!(
+            "WARNING: VERITAS_ALLOW_INSECURE_AUTH=1 — wallet signatures are NOT cryptographically verified. Local testing only."
+        );
+        Arc::new(InsecureAcceptingAuthVerifier)
+    } else {
+        Arc::new(UnconfiguredAuthVerifier)
+    }
 }
 
 #[derive(Deserialize)]
@@ -131,4 +180,37 @@ pub(crate) async fn verify(
         .create_session(&session_token, &request.wallet, &expires_at.to_rfc3339())
         .await?;
     Ok(Json(VerifyResponse { session_token }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AuthVerifier, InsecureAcceptingAuthVerifier};
+
+    #[tokio::test]
+    async fn insecure_verifier_accepts_non_empty_signature_and_public_key() {
+        let verifier = InsecureAcceptingAuthVerifier;
+        assert!(
+            verifier
+                .verify("kaspatest:qq", "challenge", "sig", "pubkey")
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn insecure_verifier_rejects_empty_signature_or_public_key() {
+        let verifier = InsecureAcceptingAuthVerifier;
+        assert!(
+            !verifier
+                .verify("kaspatest:qq", "challenge", "  ", "pubkey")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !verifier
+                .verify("kaspatest:qq", "challenge", "sig", "")
+                .await
+                .unwrap()
+        );
+    }
 }

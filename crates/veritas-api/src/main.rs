@@ -2,28 +2,9 @@ use std::{env, sync::Arc};
 
 use async_trait::async_trait;
 use veritas_api::{
-    ApiError, AppState, AuthVerifier, ChainVerifier, DataKey, Database, SystemClock, router,
+    ApiError, AppState, ChainVerifier, DataKey, Database, SystemClock, auth_verifier_from_env,
+    router,
 };
-
-/// The real Kaspa wallet message verifier is intentionally deferred to Task 10.
-/// Starting this binary before then must not turn a supplied wallet string into
-/// an authenticated identity.
-struct UnconfiguredAuthVerifier;
-
-#[async_trait]
-impl AuthVerifier for UnconfiguredAuthVerifier {
-    async fn verify(
-        &self,
-        _wallet: &str,
-        _challenge: &str,
-        _signature: &str,
-        _public_key: &str,
-    ) -> Result<bool, ApiError> {
-        Err(ApiError::unavailable(
-            "wallet authentication is not configured",
-        ))
-    }
-}
 
 /// The local Argent runtime provides no live chain query. Task 10 replaces
 /// this with a verified testnet source before vote submission is enabled.
@@ -62,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         database,
         data_key,
         Arc::new(UnconfiguredChainVerifier),
-        Arc::new(UnconfiguredAuthVerifier),
+        auth_verifier_from_env(),
         Arc::new(SystemClock),
     ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;

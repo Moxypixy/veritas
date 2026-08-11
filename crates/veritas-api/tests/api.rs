@@ -14,7 +14,8 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 use veritas::{VoteAnswer, commitment_hash};
 use veritas_api::{
-    ApiError, AppState, AuthVerifier, ChainVerifier, DataKey, Database, FixedClock, router,
+    ApiError, AppState, AuthVerifier, ChainVerifier, DataKey, Database, FixedClock,
+    InsecureAcceptingAuthVerifier, router,
 };
 use veritas_inflation::{OfficialPoint, OfficialSeries};
 
@@ -218,6 +219,69 @@ async fn verification_rejects_an_invalid_wallet_signature() {
         json_response(response).await,
         json!({ "error": "wallet signature is invalid" })
     );
+}
+
+#[tokio::test]
+async fn insecure_verifier_creates_session_for_non_empty_signature() {
+    let database = Database::connect("sqlite::memory:").await.unwrap();
+    let clock = FixedClock::new(Utc.with_ymd_and_hms(2026, 8, 10, 12, 0, 0).unwrap());
+    let app = router(AppState::new(
+        database,
+        DataKey::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=").unwrap(),
+        Arc::new(FakeChainVerifier::default()),
+        Arc::new(InsecureAcceptingAuthVerifier),
+        Arc::new(clock),
+    ));
+    let wallet = "kaspatest:wallet-a";
+    let challenge = json_response(
+        post(
+            app.clone(),
+            "/v1/auth/challenge",
+            json!({ "wallet": wallet }),
+        )
+        .await,
+    )
+    .await;
+
+    let response = post(
+        app.clone(),
+        "/v1/auth/verify",
+        json!({
+            "wallet": wallet,
+            "nonce": challenge["nonce"],
+            "signature": "any",
+            "public_key": "pk",
+        }),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        json_response(response).await["session_token"]
+            .as_str()
+            .is_some_and(|token| !token.is_empty())
+    );
+
+    let challenge = json_response(
+        post(
+            app.clone(),
+            "/v1/auth/challenge",
+            json!({ "wallet": wallet }),
+        )
+        .await,
+    )
+    .await;
+    let response = post(
+        app,
+        "/v1/auth/verify",
+        json!({
+            "wallet": wallet,
+            "nonce": challenge["nonce"],
+            "signature": "",
+            "public_key": "pk",
+        }),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
