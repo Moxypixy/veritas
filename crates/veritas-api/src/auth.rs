@@ -19,6 +19,7 @@ pub trait AuthVerifier: Send + Sync {
         wallet: &str,
         challenge: &str,
         signature: &str,
+        public_key: &str,
     ) -> Result<bool, ApiError>;
 }
 
@@ -31,6 +32,7 @@ pub(crate) struct ChallengeRequest {
 pub(crate) struct ChallengeResponse {
     nonce: String,
     expires_at: String,
+    message: String,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +40,7 @@ pub(crate) struct VerifyRequest {
     wallet: String,
     nonce: String,
     signature: String,
+    public_key: String,
 }
 
 #[derive(Serialize)]
@@ -76,6 +79,7 @@ pub(crate) async fn challenge(
         Json(ChallengeResponse {
             nonce,
             expires_at: expires_at.to_rfc3339(),
+            message: challenge,
         }),
     ))
 }
@@ -87,9 +91,10 @@ pub(crate) async fn verify(
     if request.wallet.trim().is_empty()
         || request.nonce.trim().is_empty()
         || request.signature.trim().is_empty()
+        || request.public_key.trim().is_empty()
     {
         return Err(ApiError::bad_request(
-            "wallet, nonce, and signature are required",
+            "wallet, nonce, signature, and public_key are required",
         ));
     }
 
@@ -101,7 +106,12 @@ pub(crate) async fn verify(
         .ok_or_else(|| ApiError::unauthorized("challenge is invalid or expired"))?;
     if !state
         .auth_verifier
-        .verify(&request.wallet, &challenge, &request.signature)
+        .verify(
+            &request.wallet,
+            &challenge,
+            &request.signature,
+            &request.public_key,
+        )
         .await?
     {
         return Err(ApiError::unauthorized("wallet signature is invalid"));

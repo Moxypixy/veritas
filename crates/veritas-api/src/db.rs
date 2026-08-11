@@ -1,4 +1,7 @@
 use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
+use veritas_inflation::{
+    OfficialRegionData, OfficialSeries, migrate_store, region_data, replace_region,
+};
 
 use crate::ApiError;
 
@@ -12,10 +15,21 @@ pub(crate) struct NewVote<'a> {
     pub(crate) month_key: &'a str,
     pub(crate) region_id: &'a str,
     pub(crate) ciphertext: &'a [u8],
+    pub(crate) nonce: &'a [u8],
     pub(crate) commitment: &'a [u8; 32],
     pub(crate) necessities_pct: u8,
     pub(crate) employment: &'a str,
     pub(crate) created_at: &'a str,
+}
+
+pub(crate) struct EncryptedAnswer {
+    pub(crate) ciphertext: Vec<u8>,
+    pub(crate) nonce: Vec<u8>,
+}
+
+pub(crate) struct VotePoint {
+    pub(crate) month_key: String,
+    pub(crate) value: f64,
 }
 
 impl Database {
@@ -29,6 +43,11 @@ impl Database {
         let database = Self { pool };
         database.migrate().await?;
         Ok(database)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 
     async fn migrate(&self) -> Result<(), ApiError> {
@@ -70,6 +89,9 @@ impl Database {
                 .await
                 .map_err(|_| ApiError::unavailable("database migration failed"))?;
         }
+        migrate_store(&self.pool)
+            .await
+            .map_err(|_| ApiError::unavailable("database migration failed"))?;
         Ok(())
     }
 
@@ -179,7 +201,7 @@ impl Database {
         .bind(vote.month_key)
         .bind(vote.region_id)
         .bind(vote.ciphertext)
-        .bind(Vec::<u8>::new())
+        .bind(vote.nonce)
         .bind(vote.commitment.as_slice())
         .bind(vote.created_at)
         .execute(&mut *tx)
@@ -216,6 +238,34 @@ impl Database {
         tx.commit()
             .await
             .map_err(|_| ApiError::unavailable("could not store vote"))?;
+        Ok(())
+    }
+
+    pub(crate) async fn answers_for_wallet(
+        &self,
+        wallet: &str,
+    ) -> Result<Vec<EncryptedAnswer>, ApiError> {
+        let rows =
+            sqlx::query("SELECT ciphertext, nonce FROM answers WHERE wallet = ? ORDER BY id ASC")
+                .bind(wallet)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|_| ApiError::unavailable("database unavailable"))?;
+        Ok(rows
+            .into_iter()
+            .map(|row| EncryptedAnswer {
+                ciphertext: row.get("ciphertext"),
+                nonce: row.get("nonce"),
+            })
+            .collect())
+    }
+
+    pub(crate) async fn delete_answers_for_wallet(&self, wallet: &str) -> Result<(), ApiError> {
+        sqlx::query("DELETE FROM answers WHERE wallet = ?")
+            .bind(wallet)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| ApiError::unavailable("could not erase answers"))?;
         Ok(())
     }
 
@@ -263,5 +313,57 @@ impl Database {
             row.get("employed_n"),
             row.get("unemployed_n"),
         ))
+    }
+
+    pub async fn replace_official_series(
+        &self,
+        region_id: &str,
+        series: &[OfficialSeries],
+    ) -> Result<(), ApiError> {
+        replace_region(&self.pool, region_id, series)
+            .await
+            .map_err(|_| ApiError::unavailable("could not store official series"))
+    }
+
+    pub(crate) async fn official_region_data(
+        &self,
+        region_id: &str,
+    ) -> Result<OfficialRegionData, ApiError> {
+        region_data(&self.pool, region_id)
+            .await
+            .map_err(|_| ApiError::unavailable("could not load official series"))
+    }
+
+    pub(crate) async fn chart_vote_points(
+        &self,
+        region_id: &str,
+        employment: &str,
+    ) -> Result<Vec<VotePoint>, ApiError> {
+        let rows = sqlx::query(
+            "SELECT month_key, n, necessities_sum FROM aggregate_bins
+             WHERE region_id = ? AND employment = ?
+             ORDER BY month_key",
+        )
+        .bind(region_id)
+        .bind(employment)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| ApiError::unavailable("database unavailable"))?;
+
+        let mut points = Vec::new();
+        for row in rows {
+            let month_key: String = row.get("month_key");
+            let n: i64 = row.get("n");
+            let necessities_sum: i64 = row.get("necessities_sum");
+            let (_, employed_n, unemployed_n) =
+                self.employment_counts(region_id, &month_key).await?;
+            if !crate::aggregates::is_suppressed(n, employed_n, unemployed_n) {
+                points.push(VotePoint {
+                    month_key,
+                    value: necessities_sum as f64 / n as f64,
+                });
+            }
+        }
+        Ok(points)
     }
 }

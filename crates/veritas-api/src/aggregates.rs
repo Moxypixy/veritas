@@ -6,7 +6,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ApiError, AppState};
 
-const SUPPRESSION_THRESHOLD: i64 = 5;
+pub(crate) const SUPPRESSION_THRESHOLD: i64 = 5;
+
+pub(crate) fn is_suppressed(n: i64, employed_n: i64, unemployed_n: i64) -> bool {
+    n < SUPPRESSION_THRESHOLD
+        || [employed_n, unemployed_n]
+            .into_iter()
+            .any(|count| (1..SUPPRESSION_THRESHOLD).contains(&count))
+}
 
 #[derive(Deserialize)]
 pub(crate) struct AggregateQuery {
@@ -45,10 +52,7 @@ pub(crate) async fn get(
         .database
         .employment_counts(&query.region_id, &query.month_key)
         .await?;
-    let suppressed = n < SUPPRESSION_THRESHOLD
-        || [employed_n, unemployed_n]
-            .into_iter()
-            .any(|count| (1..SUPPRESSION_THRESHOLD).contains(&count));
+    let suppressed = is_suppressed(n, employed_n, unemployed_n);
     Ok(Json(AggregateResponse {
         necessities_avg_pct: (!suppressed).then(|| necessities_sum as f64 / n as f64),
         n,

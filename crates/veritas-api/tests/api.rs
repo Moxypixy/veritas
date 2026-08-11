@@ -13,7 +13,10 @@ use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use veritas::{VoteAnswer, commitment_hash};
-use veritas_api::{ApiError, AppState, AuthVerifier, ChainVerifier, Database, FixedClock, router};
+use veritas_api::{
+    ApiError, AppState, AuthVerifier, ChainVerifier, DataKey, Database, FixedClock, router,
+};
+use veritas_inflation::{OfficialPoint, OfficialSeries};
 
 #[derive(Default)]
 struct FakeChainVerifier {
@@ -54,6 +57,7 @@ impl AuthVerifier for AcceptingAuthVerifier {
         _wallet: &str,
         _challenge: &str,
         signature: &str,
+        _public_key: &str,
     ) -> Result<bool, ApiError> {
         Ok(signature == "test-signature")
     }
@@ -61,9 +65,14 @@ impl AuthVerifier for AcceptingAuthVerifier {
 
 async fn test_app(chain: Arc<FakeChainVerifier>) -> axum::Router {
     let database = Database::connect("sqlite::memory:").await.unwrap();
+    test_app_with_database(database, chain)
+}
+
+fn test_app_with_database(database: Database, chain: Arc<FakeChainVerifier>) -> axum::Router {
     let clock = FixedClock::new(Utc.with_ymd_and_hms(2026, 8, 10, 12, 0, 0).unwrap());
     router(AppState::new(
         database,
+        DataKey::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=").unwrap(),
         chain,
         Arc::new(AcceptingAuthVerifier),
         Arc::new(clock),
@@ -103,6 +112,7 @@ async fn authenticated_session(app: axum::Router, wallet: &str) -> String {
             "wallet": wallet,
             "nonce": challenge["nonce"],
             "signature": "test-signature",
+            "public_key": "02aabbccddeeff",
         }),
     )
     .await;
@@ -138,12 +148,76 @@ fn vote_request(answer: &VoteAnswer, commitment: [u8; 32]) -> Value {
     })
 }
 
+#[test]
+fn data_key_round_trips_answer_bytes_with_a_fresh_nonce() {
+    let key = DataKey::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=").unwrap();
+    let plaintext = br#"{"region_id":"euro-area"}"#;
+
+    let (ciphertext, nonce) = key.encrypt(plaintext).unwrap();
+    let decrypted = key.decrypt(&nonce, &ciphertext).unwrap();
+
+    assert_ne!(ciphertext, plaintext);
+    assert_eq!(decrypted, plaintext);
+    assert_eq!(nonce.len(), 12);
+}
+
 #[tokio::test]
 async fn challenge_verification_creates_a_wallet_bound_session() {
     let app = test_app(Arc::new(FakeChainVerifier::default())).await;
     let token = authenticated_session(app, "wallet-a").await;
 
     assert!(!token.is_empty());
+}
+
+#[tokio::test]
+async fn challenge_response_has_a_domain_separated_expiring_message() {
+    let app = test_app(Arc::new(FakeChainVerifier::default())).await;
+
+    let response = post(
+        app,
+        "/v1/auth/challenge",
+        json!({ "wallet": "kaspatest:wallet-a" }),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = json_response(response).await;
+    assert!(body["message"].as_str().is_some_and(|message| {
+        message.starts_with("Veritas login\nwallet=kaspatest:wallet-a\nnonce=")
+            && message.ends_with("\nexpires_at=2026-08-10T12:05:00+00:00")
+    }));
+}
+
+#[tokio::test]
+async fn verification_rejects_an_invalid_wallet_signature() {
+    let app = test_app(Arc::new(FakeChainVerifier::default())).await;
+    let challenge = json_response(
+        post(
+            app.clone(),
+            "/v1/auth/challenge",
+            json!({ "wallet": "kaspatest:wallet-a" }),
+        )
+        .await,
+    )
+    .await;
+
+    let response = post(
+        app,
+        "/v1/auth/verify",
+        json!({
+            "wallet": "kaspatest:wallet-a",
+            "nonce": challenge["nonce"],
+            "signature": "forged-signature",
+            "public_key": "02aabbccddeeff",
+        }),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        json_response(response).await,
+        json!({ "error": "wallet signature is invalid" })
+    );
 }
 
 #[tokio::test]
@@ -263,4 +337,226 @@ async fn aggregates_suppress_all_related_bins_when_one_employment_group_is_sensi
             json!({ "necessities_avg_pct": null, "n": n, "suppressed": true })
         );
     }
+}
+
+#[tokio::test]
+async fn chart_exposes_plain_language_official_price_series() {
+    let database = Database::connect("sqlite::memory:").await.unwrap();
+    database
+        .replace_official_series(
+            "euro-area",
+            &[OfficialSeries {
+                key: "prices_overall".into(),
+                label: "How fast prices are rising overall".into(),
+                points: vec![OfficialPoint {
+                    month_key: "2026-08".into(),
+                    value: 2.1,
+                }],
+            }],
+        )
+        .await
+        .unwrap();
+    let app = test_app_with_database(database, Arc::new(FakeChainVerifier::default()));
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/chart?region_id=euro-area")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        json_response(response).await,
+        json!({
+            "region_id": "euro-area",
+            "official_unavailable": false,
+            "series": [{
+                "key": "prices_overall",
+                "label": "How fast prices are rising overall",
+                "points": [{ "month_key": "2026-08", "value": 2.1 }]
+            }, {
+                "key": "voters_necessities",
+                "label": "What voters say they spend on necessities",
+                "points": []
+            }]
+        })
+    );
+}
+
+#[tokio::test]
+async fn chart_marks_official_series_unavailable_without_a_successful_fetch() {
+    let chain = Arc::new(FakeChainVerifier::default());
+    let app = test_app(chain.clone()).await;
+
+    for index in 0..5 {
+        let wallet = format!("wallet-{index}");
+        let answer = vote(&wallet, 40 + index, true);
+        let commitment = commitment_hash(&answer).unwrap();
+        chain.insert(&wallet, "2026-08", commitment);
+        let session = authenticated_session(app.clone(), &wallet).await;
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/votes")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&vote_request(&answer, commitment)).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/chart?region_id=euro-area")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        json_response(response).await,
+        json!({
+            "region_id": "euro-area",
+            "official_unavailable": true,
+            "series": [{
+                "key": "voters_necessities",
+                "label": "What voters say they spend on necessities",
+                "points": [{ "month_key": "2026-08", "value": 42.0 }]
+            }]
+        })
+    );
+}
+
+#[tokio::test]
+async fn export_requires_a_wallet_bound_session() {
+    let app = test_app(Arc::new(FakeChainVerifier::default())).await;
+
+    let response = app
+        .oneshot(Request::get("/v1/me/export").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn export_decrypts_only_the_session_wallet_answers() {
+    let chain = Arc::new(FakeChainVerifier::default());
+    let app = test_app(chain.clone()).await;
+    let answer = vote("wallet-a", 45, true);
+    let commitment = commitment_hash(&answer).unwrap();
+    chain.insert("wallet-a", "2026-08", commitment);
+    let session = authenticated_session(app.clone(), "wallet-a").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/votes")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::from(
+                    serde_json::to_vec(&vote_request(&answer, commitment)).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/me/export")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        json_response(response).await,
+        json!({
+            "answers": [{
+                "region_id": "euro-area",
+                "necessities_pct": 45,
+                "employed": true,
+                "duration_months": 12,
+                "month_key": "2026-08",
+                "salt": "09090909090909090909090909090909"
+            }]
+        })
+    );
+}
+
+#[tokio::test]
+async fn erase_removes_answers_without_recomputing_aggregate_bins() {
+    let chain = Arc::new(FakeChainVerifier::default());
+    let app = test_app(chain.clone()).await;
+    let answer = vote("wallet-a", 45, true);
+    let commitment = commitment_hash(&answer).unwrap();
+    chain.insert("wallet-a", "2026-08", commitment);
+    let session = authenticated_session(app.clone(), "wallet-a").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/votes")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::from(
+                    serde_json::to_vec(&vote_request(&answer, commitment)).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::delete("/v1/me/answers")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/me/export")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(json_response(response).await, json!({ "answers": [] }));
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/aggregates?region_id=euro-area&month_key=2026-08&employment=all")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        json_response(response).await,
+        json!({ "necessities_avg_pct": null, "n": 1, "suppressed": true })
+    );
 }

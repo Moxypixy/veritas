@@ -7,7 +7,7 @@ use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use veritas::{VoteAnswer, commitment_hash};
 
-use crate::{ApiError, AppState, db::NewVote};
+use crate::{ApiError, AppState, db::NewVote, gdpr::StoredAnswer};
 
 #[derive(Deserialize)]
 pub(crate) struct SubmitVoteRequest {
@@ -27,16 +27,6 @@ pub(crate) struct SubmitVoteRequest {
 #[derive(Serialize)]
 pub(crate) struct SubmitVoteResponse {
     accepted: bool,
-}
-
-#[derive(Serialize)]
-struct StoredAnswer<'a> {
-    region_id: &'a str,
-    necessities_pct: u8,
-    employed: bool,
-    duration_months: u32,
-    month_key: &'a str,
-    salt: String,
 }
 
 pub(crate) async fn submit(
@@ -89,18 +79,16 @@ pub(crate) async fn submit(
         ));
     }
 
-    // TODO(task-6): replace this transitional JSON payload with AES-256-GCM.
-    // It stays in the ciphertext-shaped schema so the encryption migration does
-    // not alter the personal-answer table. No Task 5 endpoint returns it.
-    let ciphertext = serde_json::to_vec(&StoredAnswer {
-        region_id: &answer.region_id,
+    let plaintext = serde_json::to_vec(&StoredAnswer {
+        region_id: answer.region_id.clone(),
         necessities_pct: answer.necessities_pct,
         employed: answer.employed,
         duration_months: answer.duration_months,
-        month_key: &answer.month_key,
+        month_key: answer.month_key.clone(),
         salt: request.salt,
     })
     .map_err(|_| ApiError::unavailable("could not serialize vote"))?;
+    let (ciphertext, nonce) = state.data_key.encrypt(&plaintext)?;
     let employment = if answer.employed {
         "employed"
     } else {
@@ -114,6 +102,7 @@ pub(crate) async fn submit(
             month_key: &answer.month_key,
             region_id: &answer.region_id,
             ciphertext: &ciphertext,
+            nonce: &nonce,
             commitment: &calculated_commitment,
             necessities_pct: answer.necessities_pct,
             employment,
@@ -127,7 +116,7 @@ pub(crate) async fn submit(
     ))
 }
 
-fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
+pub(crate) fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
     let header = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())

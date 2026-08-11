@@ -7,8 +7,10 @@ license = "ISC"
 publish = false
 
 [dependencies]
+aes-gcm = "0.10.3"
 async-trait = "0.1.92"
 axum = { version = "0.8", features = ["macros"] }
+base64 = "0.22.1"
 chrono = { version = "0.4.45", features = ["serde"] }
 hex = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -17,6 +19,7 @@ sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio",
 tokio = { version = "1.53.1", features = ["macros", "net", "rt-multi-thread"] }
 uuid = { version = "1.24.0", features = ["v4"] }
 veritas = { path = "../.." }
+veritas-inflation = { path = "../veritas-inflation" }
 
 [dev-dependencies]
 http-body-util = "0.1.4"
