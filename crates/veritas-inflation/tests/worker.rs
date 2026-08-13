@@ -37,7 +37,7 @@ async fn worker_stores_all_required_series_from_recorded_http_responses() {
     let region = config
         .regions
         .iter()
-        .find(|region| region.id == "united-states")
+        .find(|region| region.id == "euro-area")
         .unwrap();
     let pool = store().await;
 
@@ -46,7 +46,7 @@ async fn worker_stores_all_required_series_from_recorded_http_responses() {
         .unwrap();
 
     assert_eq!(result, RefreshResult::Updated);
-    let stored = region_data(&pool, "united-states").await.unwrap();
+    let stored = region_data(&pool, "euro-area").await.unwrap();
     assert!(!stored.unavailable);
     assert_eq!(stored.series.len(), 4);
     assert!(stored.series.iter().all(|series| series.points.len() == 2));
@@ -58,17 +58,12 @@ async fn failed_fetch_marks_official_series_unavailable() {
     let region = config
         .regions
         .iter()
-        .find(|region| region.id == "united-states")
+        .find(|region| region.id == "euro-area")
         .unwrap();
     let pool = store().await;
 
     let result = fetch_region(&FailingHttpClient, &pool, &config.source, region).await;
 
     assert!(result.is_err());
-    assert!(
-        region_data(&pool, "united-states")
-            .await
-            .unwrap()
-            .unavailable
-    );
+    assert!(region_data(&pool, "euro-area").await.unwrap().unavailable);
 }

@@ -10,25 +10,10 @@ import {
   walletErrorMessage,
   type WalletSession,
 } from './wallet/kastle'
-import ChartPage from './pages/ChartPage'
+import { ChartPanel } from './pages/ChartPage'
+import { REGIONS } from './regions'
 
-const REGIONS = [
-  { id: 'euro-area', label: 'Euro area' },
-  { id: 'united-states', label: 'United States' },
-  { id: 'united-kingdom', label: 'United Kingdom' },
-  { id: 'japan', label: 'Japan' },
-] as const
-
-function Navigation() {
-  return (
-    <nav className="site-nav" aria-label="Primary navigation">
-      <a href="/" aria-current="page">Vote</a>
-      <a href="/chart">Chart</a>
-    </nav>
-  )
-}
-
-function VotePage() {
+export function VoteSection() {
   const [consented, setConsented] = useState(false)
   const [employment, setEmployment] = useState<'employed' | 'unemployed'>('employed')
   const [depositConfirmed, setDepositConfirmed] = useState(false)
@@ -42,7 +27,7 @@ function VotePage() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!depositConfirmed || !privacyConfirmed) {
+    if (!consented || !depositConfirmed || !privacyConfirmed) {
       setMessage('Confirm the deposit and privacy statements before continuing.')
       return
     }
@@ -92,53 +77,39 @@ function VotePage() {
     }
   }
 
-  if (!consented) {
-    return (
-      <main className="page">
-        <Navigation />
-        <header className="hero">
-          <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
-          <h1>Before you vote</h1>
-          <p>Read how your answer, commitment, and deposit are handled. You can continue only after acknowledging this notice.</p>
-        </header>
-
-        <section className="card" aria-labelledby="privacy-heading">
-          <h2 id="privacy-heading">What is recorded</h2>
-          <dl className="facts">
-            <div>
-              <dt>On Kaspa</dt>
-              <dd>Your wallet identity as needed for the vote, UTC month, a cryptographic commitment to your answer, and the deposit lock. The commitment cannot be removed from Kaspa.</dd>
-            </div>
-            <div>
-              <dt>On our servers</dt>
-              <dd>Your full encrypted answer is used for anonymous aggregates. You can request its export or erasure later; erasure cannot remove the on-chain commitment.</dd>
-            </div>
-            <div>
-              <dt>Deposit</dt>
-              <dd>A fixed <strong>0.1 KAS</strong> testnet deposit is locked with a valid monthly vote and becomes claimable the following month when the rules are followed.</dd>
-            </div>
-          </dl>
-          <aside className="notice">
-            <h2>Important trust boundary</h2>
-            <p>Option A relies on the indexer to gate one vote per wallet for the current UTC month and to aggregate answers honestly. On-chain records the deposit and commitment, not your plaintext answer.</p>
-          </aside>
-          <label className="check-row">
-            <input type="checkbox" checked={consented} onChange={(event) => setConsented(event.target.checked)} />
-            <span>I understand what is immutable on-chain, what can be erased off-chain, and how the 0.1 KAS deposit works.</span>
-          </label>
-        </section>
-      </main>
-    )
-  }
-
   return (
-    <main className="page">
-      <Navigation />
-      <header className="hero">
-        <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
-        <h1>Share this month’s experience</h1>
+    <section className="vote-section" aria-labelledby="vote-heading">
+      <header className="section-heading">
+        <h2 id="vote-heading">Share this month’s experience</h2>
         <p>Your detailed answer is not published on-chain. Only its commitment and the deposit are intended for Kaspa.</p>
       </header>
+
+      <section className="card" aria-labelledby="privacy-heading">
+        <h3 id="privacy-heading">Before you vote</h3>
+        <p>Read how your answer, commitment, and deposit are handled. You can submit only after acknowledging this notice.</p>
+        <dl className="facts">
+          <div>
+            <dt>On Kaspa</dt>
+            <dd>Your wallet identity as needed for the vote, UTC month, a cryptographic commitment to your answer, and the deposit lock. The commitment cannot be removed from Kaspa.</dd>
+          </div>
+          <div>
+            <dt>On our servers</dt>
+            <dd>Your full encrypted answer is used for anonymous aggregates. You can request its export or erasure later; erasure cannot remove the on-chain commitment.</dd>
+          </div>
+          <div>
+            <dt>Deposit</dt>
+            <dd>A fixed <strong>0.1 KAS</strong> testnet deposit is locked with a valid monthly vote and becomes claimable the following month when the rules are followed.</dd>
+          </div>
+        </dl>
+        <aside className="notice">
+          <h3>Important trust boundary</h3>
+          <p>Option A relies on the indexer to gate one vote per wallet for the current UTC month and to aggregate answers honestly. On-chain records the deposit and commitment, not your plaintext answer.</p>
+        </aside>
+        <label className="check-row">
+          <input type="checkbox" checked={consented} onChange={(event) => setConsented(event.target.checked)} />
+          <span>I understand what is immutable on-chain, what can be erased off-chain, and how the 0.1 KAS deposit works.</span>
+        </label>
+      </section>
 
       <form className="card form" onSubmit={handleSubmit}>
         <fieldset>
@@ -201,10 +172,20 @@ function VotePage() {
         )}
         <button type="submit">Review vote</button>
       </form>
-    </main>
+    </section>
   )
 }
 
 export default function App() {
-  return window.location.pathname === '/chart' ? <ChartPage /> : <VotePage />
+  return (
+    <main className="page">
+      <header className="hero">
+        <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
+        <h1>Cost-of-Living Pulse</h1>
+        <p>Compare price changes with anonymous monthly averages, then share your experience.</p>
+      </header>
+      <ChartPanel />
+      <VoteSection />
+    </main>
+  )
 }

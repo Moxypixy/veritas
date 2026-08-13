@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const REGIONS = [
-  { id: 'euro-area', label: 'Euro area' },
-  { id: 'united-states', label: 'United States' },
-  { id: 'united-kingdom', label: 'United Kingdom' },
-  { id: 'japan', label: 'Japan' },
-] as const
+import { REGIONS } from '../regions'
 
 const EMPLOYMENT_FILTERS = [
   { value: 'all', label: 'All' },
@@ -143,7 +138,7 @@ export function ChartDataSection({
   return <ChartContent response={response} />
 }
 
-export default function ChartPage({ loadChart: requestChart = loadChart }: ChartPageProps) {
+export function ChartPanel({ loadChart: requestChart = loadChart }: ChartPageProps) {
   const [regionId, setRegionId] = useState('euro-area')
   const [employment, setEmployment] = useState<EmploymentFilter>('all')
   const [response, setResponse] = useState<ChartResponse | null>(null)
@@ -164,14 +159,9 @@ export default function ChartPage({ loadChart: requestChart = loadChart }: Chart
   }, [employment, regionId, requestChart])
 
   return (
-    <main className="page">
-      <nav className="site-nav" aria-label="Primary navigation">
-        <a href="/">Vote</a>
-        <a href="/chart" aria-current="page">Chart</a>
-      </nav>
-      <header className="hero">
-        <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
-        <h1>Cost-of-living chart</h1>
+    <section className="chart-panel" aria-labelledby="chart-heading">
+      <header className="section-heading">
+        <h2 id="chart-heading">Cost-of-living chart</h2>
         <p>Compare official price changes with anonymous monthly averages reported by voters. No individual votes or wallet addresses are shown.</p>
       </header>
 
@@ -200,6 +190,10 @@ export default function ChartPage({ loadChart: requestChart = loadChart }: Chart
 
         <ChartDataSection error={error} response={response} />
       </section>
-    </main>
+    </section>
   )
+}
+
+export default function ChartPage(props: ChartPageProps) {
+  return <ChartPanel {...props} />
 }

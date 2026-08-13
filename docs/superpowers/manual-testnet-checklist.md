@@ -8,6 +8,12 @@ This application is testnet-only. Do not use a mainnet wallet, seed phrase, or p
 2. Configure `VERITAS_KASPA_RPC_URL` with an operator-controlled Testnet-10 RPC endpoint.
 3. Start the API with a separately generated `VERITAS_DATA_KEY`; do not put it in the browser or commit it.
 4. Install **Kastle**, fund a **Testnet-10** account via `https://faucet-tn10.kaspanet.io/` using the `kaspatest:…` address, and confirm Kastle reports network `testnet-10`. (Operator env uses `VERITAS_KASPA_NETWORK=kaspa_testnet_10`; the wallet network id is Kastle’s `testnet-10`.)
+5. For local Kastle login testing only, set `VERITAS_ALLOW_INSECURE_AUTH=1` on the API process. **Never** enable this on a public deployment.
+
+## UI layout and regions
+
+1. Confirm one page shows the chart on top and the full vote form below (no separate Vote/Chart navigation).
+2. Confirm region dropdowns list expanded OECD areas (from shared `regions.json`), not only the original four. When changing regions, update both `web/src/regions.json` and `crates/veritas-inflation/regions.json`; the web Vitest suite enforces their ordered `{id, label}` lists match.
 
 ## Wallet login
 
@@ -16,6 +22,7 @@ This application is testnet-only. Do not use a mainnet wallet, seed phrase, or p
 3. Inspect the login message: it must name `Veritas`, the displayed wallet, a nonce, and an expiry.
 4. Approve the message signature only after inspecting it. Reject once and confirm the page says no signature or transaction was submitted.
 5. With a valid verifier configured, confirm a session is created for the same wallet; attempt a modified signature and confirm the API returns `401 wallet signature is invalid`.
+6. Restart the API without `VERITAS_ALLOW_INSECURE_AUTH`; confirm **Connect Kastle** still fails closed at `/v1/auth/verify` (no session created).
 
 ## Transaction handoff
 

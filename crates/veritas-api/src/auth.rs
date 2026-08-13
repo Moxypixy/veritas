@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::Duration;
@@ -11,7 +13,8 @@ use crate::{ApiError, AppState};
 /// Kaspa wallet message formats are integrated in Task 10. The production
 /// binary deliberately installs a rejecting verifier until that work exists;
 /// accepting a wallet identifier without a verified signature would make
-/// wallet-bound sessions forgeable.
+/// wallet-bound sessions forgeable. `VERITAS_ALLOW_INSECURE_AUTH=1` enables
+/// the accepting verifier only for explicit local testing.
 #[async_trait]
 pub trait AuthVerifier: Send + Sync {
     async fn verify(
@@ -21,6 +24,53 @@ pub trait AuthVerifier: Send + Sync {
         signature: &str,
         public_key: &str,
     ) -> Result<bool, ApiError>;
+}
+
+pub struct UnconfiguredAuthVerifier;
+
+#[async_trait]
+impl AuthVerifier for UnconfiguredAuthVerifier {
+    async fn verify(
+        &self,
+        _wallet: &str,
+        _challenge: &str,
+        _signature: &str,
+        _public_key: &str,
+    ) -> Result<bool, ApiError> {
+        Err(ApiError::unavailable(
+            "wallet authentication is not configured",
+        ))
+    }
+}
+
+pub struct InsecureAcceptingAuthVerifier;
+
+#[async_trait]
+impl AuthVerifier for InsecureAcceptingAuthVerifier {
+    async fn verify(
+        &self,
+        _wallet: &str,
+        _challenge: &str,
+        signature: &str,
+        public_key: &str,
+    ) -> Result<bool, ApiError> {
+        Ok(!signature.trim().is_empty() && !public_key.trim().is_empty())
+    }
+}
+
+pub fn insecure_auth_enabled() -> bool {
+    std::env::var("VERITAS_ALLOW_INSECURE_AUTH").as_deref() == Ok("1")
+}
+
+pub fn auth_verifier_from_env() -> Arc<dyn AuthVerifier> {
+    if insecure_auth_enabled() {
+        eprintln!(
+            "WARNING: VERITAS_ALLOW_INSECURE_AUTH=1 — wallet signatures are NOT cryptographically verified. Local testing only."
+        );
+        Arc::new(InsecureAcceptingAuthVerifier)
+    } else {
+        Arc::new(UnconfiguredAuthVerifier)
+    }
 }
 
 #[derive(Deserialize)]
@@ -90,11 +140,10 @@ pub(crate) async fn verify(
 ) -> Result<Json<VerifyResponse>, ApiError> {
     if request.wallet.trim().is_empty()
         || request.nonce.trim().is_empty()
-        || request.signature.trim().is_empty()
         || request.public_key.trim().is_empty()
     {
         return Err(ApiError::bad_request(
-            "wallet, nonce, signature, and public_key are required",
+            "wallet, nonce, and public_key are required",
         ));
     }
 
@@ -131,4 +180,84 @@ pub(crate) async fn verify(
         .create_session(&session_token, &request.wallet, &expires_at.to_rfc3339())
         .await?;
     Ok(Json(VerifyResponse { session_token }))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        ffi::OsString,
+        sync::{Mutex, OnceLock},
+    };
+
+    use super::{AuthVerifier, InsecureAcceptingAuthVerifier, insecure_auth_enabled};
+
+    static INSECURE_AUTH_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    struct InsecureAuthEnvRestore(Option<OsString>);
+
+    impl Drop for InsecureAuthEnvRestore {
+        fn drop(&mut self) {
+            // Tests hold INSECURE_AUTH_ENV_LOCK while mutating this process-global value.
+            unsafe {
+                match self.0.as_ref() {
+                    Some(value) => std::env::set_var("VERITAS_ALLOW_INSECURE_AUTH", value),
+                    None => std::env::remove_var("VERITAS_ALLOW_INSECURE_AUTH"),
+                }
+            }
+        }
+    }
+
+    fn insecure_auth_enabled_with_env(value: Option<&str>) -> bool {
+        let _lock = INSECURE_AUTH_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("insecure auth environment lock must not be poisoned");
+        let _restore = InsecureAuthEnvRestore(std::env::var_os("VERITAS_ALLOW_INSECURE_AUTH"));
+        unsafe {
+            match value {
+                Some(value) => std::env::set_var("VERITAS_ALLOW_INSECURE_AUTH", value),
+                None => std::env::remove_var("VERITAS_ALLOW_INSECURE_AUTH"),
+            }
+        }
+        insecure_auth_enabled()
+    }
+
+    #[test]
+    fn insecure_auth_environment_is_explicitly_opt_in() {
+        for value in [None, Some("0"), Some("true")] {
+            assert!(
+                !insecure_auth_enabled_with_env(value),
+                "{value:?} must not enable insecure authentication"
+            );
+        }
+        assert!(insecure_auth_enabled_with_env(Some("1")));
+    }
+
+    #[tokio::test]
+    async fn insecure_verifier_accepts_non_empty_signature_and_public_key() {
+        let verifier = InsecureAcceptingAuthVerifier;
+        assert!(
+            verifier
+                .verify("kaspatest:qq", "challenge", "sig", "pubkey")
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn insecure_verifier_rejects_empty_signature_or_public_key() {
+        let verifier = InsecureAcceptingAuthVerifier;
+        assert!(
+            !verifier
+                .verify("kaspatest:qq", "challenge", "  ", "pubkey")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !verifier
+                .verify("kaspatest:qq", "challenge", "sig", "")
+                .await
+                .unwrap()
+        );
+    }
 }
