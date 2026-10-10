@@ -1,6 +1,6 @@
 //! Per-batch Merkle tree over record leaves.
 //!
-//! Node hashes are domain-tagged so a leaf can never be passed off as an inner
+//! Hashes use the KCC-1 Hash (BLAKE3-256). Node hashes are domain-tagged so a leaf can never be passed off as an inner
 //! node: `leaf_node = H(0x00 || leaf)`, `parent = H(0x01 || left || right)`.
 //! An odd node at the end of a level is promoted unchanged (never duplicated),
 //! so no two different leaf lists share a root.
@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::{hash::blake2b256, hex};
+use crate::{hash::kcc_hash, hex};
 
 const LEAF_TAG: [u8; 1] = [0x00];
 const NODE_TAG: [u8; 1] = [0x01];
@@ -47,11 +47,11 @@ impl fmt::Display for MerkleError {
 impl std::error::Error for MerkleError {}
 
 pub fn leaf_node(leaf: &[u8; 32]) -> [u8; 32] {
-    blake2b256(&[&LEAF_TAG, leaf])
+    kcc_hash(&[&LEAF_TAG, leaf])
 }
 
 pub fn parent(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
-    blake2b256(&[&NODE_TAG, left, right])
+    kcc_hash(&[&NODE_TAG, left, right])
 }
 
 /// A built batch tree, kept whole so proofs can be cut for every record.

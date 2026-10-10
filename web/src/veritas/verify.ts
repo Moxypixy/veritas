@@ -1,8 +1,13 @@
 // Browser verifier for Veritas price records. Mirrors the Rust crate
-// (src/record.rs, src/merkle.rs, src/accumulator.rs, src/verify.rs) byte for
-// byte; tests run both against examples/demo so they cannot drift apart.
+// (src/record.rs, src/kip5.rs, src/merkle.rs, src/accumulator.rs,
+// src/verify.rs) byte for byte; tests run both against examples/demo so they
+// cannot drift apart.
+//
+// Commitments use the KCC-1 Hash Function (BLAKE3-256). Attester signatures
+// are KIP-5 personal-message signatures, which Kaspire's signMessage produces.
 
 import { blake2b } from '@noble/hashes/blake2.js'
+import { blake3 } from '@noble/hashes/blake3.js'
 import { schnorr } from '@noble/curves/secp256k1.js'
 
 export type Unit = 'l' | 'ml' | 'us_gal' | 'us_pt' | 'imp_gal' | 'imp_pt' | 'kg' | 'g' | 'lb' | 'oz' | 'each'
@@ -103,8 +108,39 @@ function concat(...parts: Uint8Array[]): Uint8Array {
   return out
 }
 
-function hash(...parts: Uint8Array[]): Uint8Array {
-  return blake2b(concat(...parts), { dkLen: 32 })
+/** KCC-1 Hash: unkeyed BLAKE3-256 of the concatenated parts. */
+export function kccHash(...parts: Uint8Array[]): Uint8Array {
+  return blake3(concat(...parts))
+}
+
+const hash = kccHash
+
+const KIP5_KEY = encoder.encode('PersonalMessageSigningHash')
+
+/** KIP-5: BLAKE2b-256 keyed with "PersonalMessageSigningHash". */
+export function kip5Digest(message: string): Uint8Array {
+  return blake2b(encoder.encode(message), { dkLen: 32, key: KIP5_KEY })
+}
+
+/** Verifies a KIP-5 personal-message signature against an x-only public key. */
+export function verifyKip5(message: string, signature: Uint8Array, publicKey: Uint8Array): boolean {
+  try {
+    return schnorr.verify(signature, kip5Digest(message), publicKey)
+  } catch {
+    return false
+  }
+}
+
+/** The text an attester signs; must match `attestation_message` in src/record.rs. */
+export function attestationMessage(record: PriceRecord, leaf: Uint8Array): string {
+  return [
+    'Veritas price attestation v1',
+    `item: ${record.item}`,
+    `amount_minor: ${record.amount_minor} ${record.currency}`,
+    `qty_milli: ${record.qty_milli} ${record.unit}`,
+    `observed_on: ${record.observed_on} (${record.source})`,
+    `leaf: ${bytesToHex(leaf)}`,
+  ].join('\n')
 }
 
 function u32le(value: number): Uint8Array {
@@ -183,7 +219,7 @@ export function rootFromProof(leaf: Uint8Array, proof: ProofStep[]): Uint8Array 
   }, leafNode(leaf))
 }
 
-/** acc_0 = 0^32, acc_{n+1} = blake2b(acc_n || root_n); same as anchor.sil. */
+/** acc_0 = 0^32, acc_{n+1} = Hash(acc_n || root_n); same as anchor.sil. */
 export function foldBatchRoots(roots: Uint8Array[]): Uint8Array {
   return roots.reduce((acc, root) => hash(acc, root), new Uint8Array(32))
 }
@@ -215,7 +251,11 @@ export function verify(signed: SignedRecord, receipt: Receipt, log: AnchorLog, l
 
   let signatureOk = false
   try {
-    signatureOk = schnorr.verify(hexToBytes(signed.signature, 64), leaf, hexToBytes(signed.record.attester, 32))
+    signatureOk = verifyKip5(
+      attestationMessage(signed.record, leaf),
+      hexToBytes(signed.signature, 64),
+      hexToBytes(signed.record.attester, 32),
+    )
   } catch {
     signatureOk = false
   }

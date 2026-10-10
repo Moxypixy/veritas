@@ -3,26 +3,53 @@ pragma silverscript ^0.1.0;
 // Veritas anchor: one covenant UTXO carrying the append-only accumulator of
 // every batch root.
 //
-//   acc' = blake2b(acc || batch_root)
+//   acc' = Hash(acc || batch_root)      Hash = BLAKE3-256, the KCC-1 Hash Function
 //
-// The successor output must hold exactly that accumulator, the same batcher
-// key and count + 1, so the chain refuses any update that is not an append:
+// The successor must hold exactly that accumulator, the same batcher authority
+// and count + 1, so the chain refuses any update that is not an append:
 // history cannot be rewritten, reordered or dropped, not even by the batcher.
-// The batcher's signature (SIGHASH_ALL) covers the outputs, which binds the
-// batch_root argument through the new state.
 //
-// Must stay in step with `veritas::accumulator::next_acc`.
-contract VeritasAnchor(byte[32] init_batcher, byte[32] init_acc, int init_count) {
+// Conventions:
+// - KCC-1: Silverscript 1.0 emits KCC-1 state encoding, dispatch tags and the
+//   P2SH envelope; the singleton declaration validates the continuation
+//   program, state and covenant binding.
+// - KCC-2: the batcher is an authority with a canonical scheme byte.
+//   Supported: 0x00 p2pk-schnorr/v1 and 0x04 covenant-id/v1 (lets a
+//   governance or multisig covenant run the anchor later).
+// - Witness layout follows KCC-20's owner-authentication table:
+//   p2pk-schnorr/v1 -> 65-byte transaction signature, covenant-id/v1 -> empty.
+//
+// Must stay in step with `veritas::accumulator::next_acc` and
+// `veritas_anchor::AuthorityScheme`.
+contract VeritasAnchor(byte[32] init_batcher, byte init_batcher_scheme, byte[32] init_acc, int init_count) {
+    byte constant SCHEME_P2PK_SCHNORR = 0x00;
+    byte constant SCHEME_COVENANT_ID = 0x04;
+
     byte[32] batcher = init_batcher;
+    byte batcher_scheme = init_batcher_scheme;
     byte[32] acc = init_acc;
     int count = init_count;
 
+    // KCC-2 minimum approval checks for the supported schemes.
+    function requireBatcher(byte[32] authority, byte scheme, byte[] witness) {
+        if (scheme == SCHEME_P2PK_SCHNORR) {
+            require(witness.length == 65);
+            require(checkSig(sig(witness), pubkey(authority)));
+        } else if (scheme == SCHEME_COVENANT_ID) {
+            require(witness.length == 0);
+            require(OpCovInputCount(authority) > 0);
+        } else {
+            require(false);
+        }
+    }
+
     #[covenant.singleton(mode = transition, name = append)]
-    function append_batch(State prev_state, byte[32] batch_root, sig batcher_sig) : (State) {
-        require(checkSig(batcher_sig, pubkey(prev_state.batcher)));
-        byte[32] next_acc = blake2b(byte[](prev_state.acc) + byte[](batch_root));
+    function append_batch(State prev_state, byte[32] batch_root, byte[] witness) : (State) {
+        requireBatcher(prev_state.batcher, prev_state.batcher_scheme, witness);
+        byte[32] next_acc = blake3(byte[](prev_state.acc) + byte[](batch_root));
         return(State {
             batcher: prev_state.batcher,
+            batcher_scheme: prev_state.batcher_scheme,
             acc: next_acc,
             count: prev_state.count + 1
         });

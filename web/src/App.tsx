@@ -5,12 +5,13 @@ import { walletAuthApi } from './wallet/api'
 import {
   TESTNET_FAUCET_URL,
   connectAndAuthenticate,
-  getKastleProvider,
   missingWalletMessage,
+  waitForKaspire,
   walletErrorMessage,
   type WalletSession,
-} from './wallet/kastle'
+} from './wallet/kaspire'
 import Navigation from './Navigation'
+import AttestPage from './pages/AttestPage'
 import ChartPage from './pages/ChartPage'
 import VerifyPage from './pages/VerifyPage'
 
@@ -65,7 +66,7 @@ function VotePage() {
   }
 
   async function connectWallet() {
-    const provider = getKastleProvider()
+    const provider = await waitForKaspire()
     if (!provider) {
       setMessage(missingWalletMessage())
       return
@@ -161,7 +162,7 @@ function VotePage() {
           <h2 id="deposit-heading">Testnet deposit: 0.1 KAS</h2>
           <p>Before a transaction can be signed, you will see its destination, 0.1 KAS deposit, and commitment. Your wallet asks for approval; this app does not receive private keys or seed phrases.</p>
           <button type="button" className="secondary" onClick={connectWallet} disabled={walletBusy}>
-            {walletBusy ? 'Connecting wallet…' : walletSession ? 'Wallet authenticated' : 'Connect Kastle (Testnet-10)'}
+            {walletBusy ? 'Connecting wallet…' : walletSession ? 'Wallet authenticated' : 'Connect Kaspire (Testnet-10)'}
           </button>
           {walletSession && <p className="help">Connected: {walletSession.wallet}</p>}
         </section>
@@ -202,6 +203,8 @@ export default function App() {
   switch (window.location.pathname) {
     case '/chart':
       return <ChartPage />
+    case '/attest':
+      return <AttestPage />
     case '/pulse':
       return <VotePage />
     default:

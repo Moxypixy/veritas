@@ -12,6 +12,7 @@ mod chart;
 mod crypto;
 mod db;
 mod gdpr;
+mod kip5_auth;
 mod submit;
 
 use std::sync::Arc;
@@ -26,6 +27,7 @@ use chrono::{DateTime, Utc};
 pub use auth::AuthVerifier;
 pub use crypto::DataKey;
 pub use db::Database;
+pub use kip5_auth::Kip5AuthVerifier;
 
 #[derive(Debug, Clone)]
 pub struct ApiError {

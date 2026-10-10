@@ -9,14 +9,19 @@
 //! ```
 //!
 //! Only integers are hashed, so every device produces the same bytes. The
-//! leaf is BLAKE2b-256 of that encoding; the attester signs the leaf with a
-//! BIP-340 Schnorr key (the same key type Kaspa wallets use).
+//! leaf is the KCC-1 Hash (BLAKE3-256) of that encoding.
+//!
+//! The attester is a KCC-2 `p2pk-schnorr/v1` authority: a 32-byte x-only key.
+//! It signs [`attestation_message`] with KIP-5 personal-message signing, so any
+//! Kaspa wallet that implements KIP-5 (Kaspire's `signMessage`) can attest.
+//! The message is readable in the wallet and ends with the leaf, which commits
+//! to every field.
 
-use secp256k1::{Keypair, Message, SECP256K1, XOnlyPublicKey, schnorr::Signature};
+use secp256k1::{Keypair, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::{hash::blake2b256, hex, units, units::Unit};
+use crate::{hash::kcc_hash, hex, kip5, units, units::Unit};
 
 pub const RECORD_DOMAIN: &[u8] = b"veritas.price.v1";
 pub const MAX_ITEM_LEN: usize = 64;
@@ -44,6 +49,14 @@ impl Source {
             Source::AttestedLate => 2,
         }
     }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Source::Live => "live",
+            Source::Archive => "archive",
+            Source::AttestedLate => "attested_late",
+        }
+    }
 }
 
 /// One observed price.
@@ -65,7 +78,7 @@ pub struct PriceRecord {
     /// Date of purchase or shelf reading, `YYYY-MM-DD`.
     pub observed_on: String,
     pub source: Source,
-    /// BLAKE2b-256 of the receipt or shelf photo; zeros when there is none.
+    /// KCC-1 Hash (BLAKE3-256) of the receipt or shelf photo; zeros when there is none.
     #[serde(with = "hex::array")]
     pub evidence: [u8; 32],
     /// Random per-record value so private fields cannot be guessed from the leaf.
@@ -76,7 +89,7 @@ pub struct PriceRecord {
     pub attester: [u8; 32],
 }
 
-/// A record plus the attester's Schnorr signature over its leaf.
+/// A record plus the attester's KIP-5 signature over [`attestation_message`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignedRecord {
     pub record: PriceRecord,
@@ -157,9 +170,9 @@ impl PriceRecord {
         Ok(out)
     }
 
-    /// BLAKE2b-256 of the canonical encoding.
+    /// KCC-1 Hash (BLAKE3-256) of the canonical encoding.
     pub fn leaf(&self) -> Result<[u8; 32], RecordError> {
-        Ok(blake2b256(&[&self.canonical_bytes()?]))
+        Ok(kcc_hash(&[&self.canonical_bytes()?]))
     }
 
     /// Price per litre, kilogram or item in thousandths of the minor unit.
@@ -167,40 +180,53 @@ impl PriceRecord {
         units::price_per_base_milli(self.amount_minor, self.qty_milli, self.unit)
     }
 
-    /// Signs the record's leaf. The key must belong to `self.attester`.
+    /// The exact text the attester signs with KIP-5 (shown by the wallet).
+    pub fn attestation_message(&self) -> Result<String, RecordError> {
+        let leaf = self.leaf()?;
+        Ok(attestation_message(self, &leaf))
+    }
+
+    /// Signs the attestation message with KIP-5. The key must be `self.attester`.
     pub fn sign(self, keypair: &Keypair) -> Result<SignedRecord, RecordError> {
         if keypair.x_only_public_key().0.serialize() != self.attester {
             return Err(RecordError::KeyDoesNotMatchAttester);
         }
-        let leaf = self.leaf()?;
-        let message = Message::from_digest(leaf);
-        // BIP-340 auxiliary randomness hardens signing against side channels;
-        // the signature stays valid (just deterministic) if none is available.
-        let mut aux = [0u8; 32];
-        let signature = match getrandom::fill(&mut aux) {
-            Ok(()) => SECP256K1.sign_schnorr_with_aux_rand(&message, keypair, &aux),
-            Err(_) => SECP256K1.sign_schnorr_no_aux_rand(&message, keypair),
-        };
+        let signature = kip5::sign(self.attestation_message()?.as_bytes(), keypair);
         Ok(SignedRecord {
             record: self,
-            signature: *signature.as_ref(),
+            signature,
         })
     }
 }
 
+/// The attestation text: a readable summary for the wallet's review screen,
+/// ending with the leaf. Verifiers rebuild it from the record, so the summary
+/// cannot disagree with what was signed.
+pub fn attestation_message(record: &PriceRecord, leaf: &[u8; 32]) -> String {
+    format!(
+        "Veritas price attestation v1\nitem: {}\namount_minor: {} {}\nqty_milli: {} {}\nobserved_on: {} ({})\nleaf: {}",
+        record.item,
+        record.amount_minor,
+        record.currency,
+        record.qty_milli,
+        record.unit.code(),
+        record.observed_on,
+        record.source.name(),
+        hex::encode(leaf)
+    )
+}
+
 impl SignedRecord {
-    /// Returns the leaf if the signature is valid for the record's attester.
+    /// Returns the leaf if the KIP-5 signature is valid for the record's attester.
     pub fn verified_leaf(&self) -> Result<Option<[u8; 32]>, RecordError> {
         let leaf = self.record.leaf()?;
-        let key = XOnlyPublicKey::from_slice(&self.record.attester)
+        XOnlyPublicKey::from_slice(&self.record.attester)
             .map_err(|_| RecordError::InvalidAttesterKey)?;
-        let Ok(signature) = Signature::from_slice(&self.signature) else {
-            return Ok(None);
-        };
-        Ok(signature
-            .verify(&Message::from_digest(leaf), &key)
-            .is_ok()
-            .then_some(leaf))
+        let message = attestation_message(&self.record, &leaf);
+        Ok(
+            kip5::verify(message.as_bytes(), &self.signature, &self.record.attester)
+                .then_some(leaf),
+        )
     }
 }
 
@@ -309,6 +335,29 @@ pub(crate) mod tests {
         let mut tampered = signed.clone();
         tampered.record.amount_minor = 995;
         assert_eq!(tampered.verified_leaf().unwrap(), None);
+    }
+
+    #[test]
+    fn wallet_message_is_readable_and_ends_with_the_leaf() {
+        let record = milk(&test_keypair(1), 1_295, "2026-10-10");
+        let message = record.attestation_message().unwrap();
+        let leaf = crate::hex::encode(&record.leaf().unwrap());
+        assert_eq!(
+            message,
+            format!(
+                "Veritas price attestation v1\nitem: milk.whole.1l.dk\namount_minor: 1295 DKK\nqty_milli: 1000 l\nobserved_on: 2026-10-10 (live)\nleaf: {leaf}"
+            )
+        );
+    }
+
+    #[test]
+    fn a_wallet_kip5_signature_is_accepted() {
+        // What Kaspire's signMessage does: KIP-5 over the attestation text.
+        let keypair = test_keypair(1);
+        let record = milk(&keypair, 1_295, "2026-10-10");
+        let signature = kip5::sign(record.attestation_message().unwrap().as_bytes(), &keypair);
+        let signed = SignedRecord { record, signature };
+        assert!(signed.verified_leaf().unwrap().is_some());
     }
 
     #[test]

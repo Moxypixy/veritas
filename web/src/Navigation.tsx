@@ -1,7 +1,8 @@
-export type Page = 'verify' | 'pulse' | 'chart'
+export type Page = 'verify' | 'attest' | 'pulse' | 'chart'
 
 const LINKS: { page: Page; href: string; label: string }[] = [
   { page: 'verify', href: '/', label: 'Verify a price' },
+  { page: 'attest', href: '/attest', label: 'Attest a price' },
   { page: 'pulse', href: '/pulse', label: 'Pulse vote' },
   { page: 'chart', href: '/chart', label: 'Chart' },
 ]

@@ -1,19 +1,20 @@
 //! The append-only accumulator carried by the anchor covenant.
 //!
-//! `acc_0 = 0^32` and `acc_{n+1} = BLAKE2b-256(acc_n || batch_root_n)`.
+//! `acc_0 = 0^32` and `acc_{n+1} = Hash(acc_n || batch_root_n)`, where `Hash`
+//! is the KCC-1 Hash Function (BLAKE3-256).
 //! `covenants/anchor.sil` computes exactly this in Kaspa script, so the chain
 //! itself refuses any update that is not an append. Anyone holding the public
 //! list of batch roots can fold it and compare the result with the live UTXO.
 
 use serde::{Deserialize, Serialize};
 
-use crate::{hash::blake2b256, hex};
+use crate::{hash::kcc_hash, hex};
 
 pub const GENESIS_ACC: [u8; 32] = [0; 32];
 
 /// One append step. Must match `append` in `covenants/anchor.sil`.
 pub fn next_acc(acc: &[u8; 32], batch_root: &[u8; 32]) -> [u8; 32] {
-    blake2b256(&[acc, batch_root])
+    kcc_hash(&[acc, batch_root])
 }
 
 /// Folds batch roots in order from the genesis accumulator.

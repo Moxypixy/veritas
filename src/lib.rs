@@ -1,13 +1,15 @@
 //! Veritas: verifiable price records anchored on Kaspa L1.
 //!
 //! The chain proves *when*; the holder proves *what*. A price record is hashed
-//! and signed on the attester's device, batched into a Merkle tree, and each
+//! with the KCC-1 Hash (BLAKE3) and signed on the attester's device with KIP-5,
+//! batched into a Merkle tree, and each
 //! batch root is folded into an append-only accumulator that a single Silverscript
 //! covenant UTXO carries on Kaspa (`covenants/anchor.sil`).
 //!
 //! Module map:
 //! - [`units`]: printed quantities and exact unit conversion.
-//! - [`record`]: the price record, its canonical encoding and signature.
+//! - [`record`]: the price record, its canonical encoding and KIP-5 signature.
+//! - [`kip5`]: Kaspa personal-message signing (what wallets like Kaspire sign).
 //! - [`merkle`]: per-batch Merkle tree and inclusion proofs.
 //! - [`accumulator`]: the hash chain of batch roots held by the covenant.
 //! - [`receipt`]: what an attester keeps next to their record.
@@ -17,6 +19,7 @@
 pub mod accumulator;
 pub mod hash;
 pub mod hex;
+pub mod kip5;
 pub mod merkle;
 pub mod pulse;
 pub mod receipt;
@@ -28,6 +31,6 @@ pub use accumulator::{AnchorLog, GENESIS_ACC, fold, next_acc};
 pub use merkle::{Batch, MerkleError, Side, Step, root_from_proof};
 pub use pulse::{COMMITMENT_DOMAIN, CommitmentError, VoteAnswer, canonical_bytes, commitment_hash};
 pub use receipt::Receipt;
-pub use record::{PriceRecord, RecordError, SignedRecord, Source};
+pub use record::{PriceRecord, RecordError, SignedRecord, Source, attestation_message};
 pub use units::{Dimension, Unit};
 pub use verify::{Confirmation, NoReason, Verdict, verify};

@@ -121,7 +121,16 @@ Current responsibilities:
   Legacy Cost-of-Living Pulse API and official-statistics worker (to move to
   The Gap).
 - `web/`
-  React client. `src/veritas/verify.ts` mirrors the Rust verifier.
+  React client. `src/veritas/verify.ts` mirrors the Rust verifier;
+  `src/wallet/kaspire.ts` is the only wallet integration (Kaspire,
+  `window.kaspire`, KIP-5 `signMessage`).
+- `covenants/anchor.abi.json`, `covenants/anchor.template-hash.txt`
+  Published KCC-1 Program ABI and template hash; regenerate with
+  `cargo run -p veritas-anchor --bin anchor-abi` after any covenant change.
+
+Conventions to keep: KCC-1 (BLAKE3 Hash, state encoding via Silverscript),
+KCC-2 canonical scheme bytes for authorities, KCC-20 witness layouts where an
+authority is checked, KIP-5 for message signatures. Veritas issues no token.
 - `examples/demo/`
   Committed demo records; Rust and web tests both verify them.
 
