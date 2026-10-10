@@ -69,3 +69,16 @@ thead { background: #e7f1eb; }
 @media (max-width: 36rem) {
   .page { padding: 1.5rem 0; }
 }
+
+textarea, input[type="text"] { border: 1px solid #6f8178; display: block; margin-top: .4rem; padding: .5rem .65rem; width: 100%; }
+textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85rem; min-height: 8rem; resize: vertical; }
+input[type="text"] { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; min-height: 2.75rem; }
+input[type="file"] { display: block; margin-top: .4rem; }
+textarea:focus-visible, input[type="text"]:focus-visible, input[type="file"]:focus-visible { outline: 3px solid #005fcc; outline-offset: 3px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.verdict { border-radius: .5rem; margin: 1.5rem 0 0; padding: 1rem 1.25rem; }
+.verdict h2 { font-size: 2rem; letter-spacing: .04em; margin: 0 0 .5rem; }
+.verdict-yes { background: #e7f1eb; border: 2px solid #1e6a4d; }
+.verdict-yes h2 { color: #14513a; }
+.verdict-no { background: #fbeaea; border: 2px solid #a12a2a; }
+.verdict-no h2 { color: #8a1f1f; }

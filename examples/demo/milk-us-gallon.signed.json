@@ -1,0 +1,16 @@
+{
+  "record": {
+    "item": "milk.whole.1gal.us",
+    "amount_minor": 431,
+    "currency": "USD",
+    "qty_milli": 1000,
+    "unit": "us_gal",
+    "place": "US city average",
+    "observed_on": "2026-07-31",
+    "source": "archive",
+    "evidence": "0000000000000000000000000000000000000000000000000000000000000000",
+    "salt": "146a744daa5a57f138c9196fc3141786",
+    "attester": "bb45803a12206a6f4d4e186240f788ed0c8ea5e57f172f54aeb1e671b1908624"
+  },
+  "signature": "72331bbcea36302e54943f02629ac6bee1be07d87e93f3e4a443bf016735e7602787a6f6c5b71fdfa562d319e8bad5f889a313fbfc7eff37d0d5e821ecf40d5d"
+}

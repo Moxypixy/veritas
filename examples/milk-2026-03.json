@@ -1,0 +1,10 @@
+{
+  "item": "milk.whole.1l.dk",
+  "amount_minor": 1195,
+  "currency": "DKK",
+  "qty_milli": 1000,
+  "unit": "l",
+  "place": "Copenhagen",
+  "observed_on": "2026-03-02",
+  "source": "live"
+}

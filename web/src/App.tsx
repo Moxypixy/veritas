@@ -10,7 +10,9 @@ import {
   walletErrorMessage,
   type WalletSession,
 } from './wallet/kastle'
+import Navigation from './Navigation'
 import ChartPage from './pages/ChartPage'
+import VerifyPage from './pages/VerifyPage'
 
 const REGIONS = [
   { id: 'euro-area', label: 'Euro area' },
@@ -18,15 +20,6 @@ const REGIONS = [
   { id: 'united-kingdom', label: 'United Kingdom' },
   { id: 'japan', label: 'Japan' },
 ] as const
-
-function Navigation() {
-  return (
-    <nav className="site-nav" aria-label="Primary navigation">
-      <a href="/" aria-current="page">Vote</a>
-      <a href="/chart">Chart</a>
-    </nav>
-  )
-}
 
 function VotePage() {
   const [consented, setConsented] = useState(false)
@@ -95,7 +88,7 @@ function VotePage() {
   if (!consented) {
     return (
       <main className="page">
-        <Navigation />
+        <Navigation current="pulse" />
         <header className="hero">
           <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
           <h1>Before you vote</h1>
@@ -133,7 +126,7 @@ function VotePage() {
 
   return (
     <main className="page">
-      <Navigation />
+      <Navigation current="pulse" />
       <header className="hero">
         <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
         <h1>Share this month’s experience</h1>
@@ -206,5 +199,12 @@ function VotePage() {
 }
 
 export default function App() {
-  return window.location.pathname === '/chart' ? <ChartPage /> : <VotePage />
+  switch (window.location.pathname) {
+    case '/chart':
+      return <ChartPage />
+    case '/pulse':
+      return <VotePage />
+    default:
+      return <VerifyPage />
+  }
 }

@@ -1,0 +1,10 @@
+{
+  "item": "milk.whole.1gal.us",
+  "amount_minor": 431,
+  "currency": "USD",
+  "qty_milli": 1000,
+  "unit": "us_gal",
+  "place": "US city average",
+  "observed_on": "2026-07-31",
+  "source": "archive"
+}

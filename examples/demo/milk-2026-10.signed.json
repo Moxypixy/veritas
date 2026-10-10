@@ -1,0 +1,16 @@
+{
+  "record": {
+    "item": "milk.whole.1l.dk",
+    "amount_minor": 1295,
+    "currency": "DKK",
+    "qty_milli": 1000,
+    "unit": "l",
+    "place": "Copenhagen",
+    "observed_on": "2026-10-10",
+    "source": "live",
+    "evidence": "0000000000000000000000000000000000000000000000000000000000000000",
+    "salt": "73b2203af8e31a8e43efab959a9599b4",
+    "attester": "bb45803a12206a6f4d4e186240f788ed0c8ea5e57f172f54aeb1e671b1908624"
+  },
+  "signature": "e2e1495e8459dd653dfdfd0df1b90ad3758f96898efc9059503458d3d85ce35d849138583bc47456df2f42cb83ef00a63d181c61cf68c22ec21e3f07528b4643"
+}
