@@ -308,6 +308,10 @@ export default function AttestPage() {
         <button type="submit" disabled={busy || cleaning || !account}>{cleaning ? 'Cleaning photo…' : 'Sign with Kaspire'}</button>
 
         <div role="status" aria-live="polite">
+          {cleaning && <p className="status">Cleaning the photo on your device…</p>}
+          {!cleaning && evidence && !message && !signed && (
+            <p className="status">Photo cleaned. Download the cleaned copy to keep with your record.</p>
+          )}
           {message && <p className="status">{message}</p>}
           {signed && (
             <section className="verdict verdict-yes" aria-labelledby="signed-heading">

@@ -36,6 +36,7 @@ function jpegFindings(bytes: Uint8Array): MetadataFinding[] {
   // JPEGs may place APPn or COM segments after the first scan.
   const found = new Set<MetadataFinding>()
   let offset = 2
+  let ended = false
   while (offset + 2 <= bytes.length) {
     if (bytes[offset] !== 0xff) return [...found, 'unknown-format'] // malformed: fail closed
     const marker = bytes[offset + 1]
@@ -43,13 +44,17 @@ function jpegFindings(bytes: Uint8Array): MetadataFinding[] {
       offset += 1 // fill byte before a marker
       continue
     }
-    if (marker === 0xd9) break // end of image
+    if (marker === 0xd9) {
+      ended = true // end of image
+      break
+    }
     if (marker >= 0xd0 && marker <= 0xd7) {
       offset += 2
       continue
     }
     if (offset + 4 > bytes.length) return [...found, 'unknown-format']
     const length = (bytes[offset + 2] << 8) | bytes[offset + 3]
+    if (length < 2 || offset + 2 + length > bytes.length) return [...found, 'unknown-format'] // truncated or overlong
     const body = offset + 4
     if (marker === 0xe1) {
       if (ascii(bytes, body, 6) === 'Exif\0\0') found.add('jpeg-exif')
@@ -63,7 +68,8 @@ function jpegFindings(bytes: Uint8Array): MetadataFinding[] {
     offset += 2 + length
     if (marker === 0xda) offset = skipEntropyData(bytes, offset)
   }
-  return [...found]
+  // A JPEG that never reaches its end marker was not fully checked: fail closed.
+  return ended ? [...found] : [...found, 'unknown-format']
 }
 
 /** Skips entropy-coded scan data. Inside it, 0xFF is followed by 0x00 (a
@@ -85,14 +91,15 @@ function pngFindings(bytes: Uint8Array): MetadataFinding[] {
   let offset = 8
   while (offset + 8 <= bytes.length) {
     const length = view.getUint32(offset)
+    if (offset + 12 + length > bytes.length) return [...found, 'unknown-format'] // overlong chunk
     const type = ascii(bytes, offset + 4, 4)
     if (type === 'eXIf') found.add('png-exif')
     if (type === 'tEXt' || type === 'iTXt' || type === 'zTXt') found.add('png-text')
     if (type === 'tIME') found.add('png-time')
-    if (type === 'IEND') break
+    if (type === 'IEND') return [...found]
     offset += 12 + length
   }
-  return [...found]
+  return [...found, 'unknown-format'] // no IEND: not fully checked
 }
 
 function webpFindings(bytes: Uint8Array): MetadataFinding[] {
@@ -102,6 +109,7 @@ function webpFindings(bytes: Uint8Array): MetadataFinding[] {
   while (offset + 8 <= bytes.length) {
     const type = ascii(bytes, offset, 4)
     const length = view.getUint32(offset + 4, true)
+    if (offset + 8 + length > bytes.length) return [...found, 'unknown-format'] // overlong chunk
     if (type === 'EXIF') found.add('webp-exif')
     if (type === 'XMP ') found.add('webp-xmp')
     offset += 8 + length + (length % 2)
