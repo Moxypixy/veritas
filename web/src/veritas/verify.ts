@@ -232,6 +232,75 @@ export function pricePerBaseMilli(amountMinor: number, qtyMilli: number, unit: U
   return (numerator + denominator / 2n) / denominator
 }
 
+export type Dimension = 'volume' | 'mass' | 'count'
+
+export const UNIT_DIMENSION: Record<Unit, Dimension> = {
+  l: 'volume', ml: 'volume', us_gal: 'volume', us_pt: 'volume', imp_gal: 'volume', imp_pt: 'volume',
+  kg: 'mass', g: 'mass', lb: 'mass', oz: 'mass',
+  each: 'count',
+}
+
+/** Units a reader can choose to see prices in, per dimension. */
+export const DISPLAY_UNITS: Record<Dimension, { unit: Unit; label: string }[]> = {
+  volume: [
+    { unit: 'l', label: 'litre' },
+    { unit: 'us_gal', label: 'US gallon' },
+    { unit: 'us_pt', label: 'US pint' },
+    { unit: 'imp_gal', label: 'imperial gallon' },
+    { unit: 'imp_pt', label: 'imperial pint' },
+  ],
+  mass: [
+    { unit: 'kg', label: 'kilogram' },
+    { unit: 'lb', label: 'pound' },
+    { unit: 'oz', label: 'ounce' },
+  ],
+  count: [{ unit: 'each', label: 'item' }],
+}
+
+export function unitLabel(unit: Unit): string {
+  return DISPLAY_UNITS[UNIT_DIMENSION[unit]].find((option) => option.unit === unit)?.label ?? unit
+}
+
+/** Default display unit for a reader. US readers get US gallons and pounds,
+ *  as US official statistics report milk per gallon. Everyone else gets litres
+ *  and kilograms; UK rules require unit prices per litre or kilogram, with
+ *  pints only as a supplementary figure. Readers can always switch. */
+export function defaultDisplayUnit(unit: Unit, locale: string | undefined): Unit {
+  const dimension = UNIT_DIMENSION[unit]
+  let region: string | undefined
+  try {
+    // Only an explicit region counts; a bare language such as "en" stays metric.
+    region = locale ? new Intl.Locale(locale).region : undefined
+  } catch {
+    region = undefined
+  }
+  if (dimension === 'volume') return region === 'US' ? 'us_gal' : 'l'
+  if (dimension === 'mass') return region === 'US' ? 'lb' : 'kg'
+  return 'each'
+}
+
+/** Price per one `display` unit in thousandths of the minor unit, rounded half
+ *  up; must match `price_per_unit_milli` in src/units.rs. Null when the
+ *  quantity is zero or the units measure different things. */
+export function pricePerUnitMilli(amountMinor: number, qtyMilli: number, unit: Unit, display: Unit): bigint | null {
+  if (UNIT_DIMENSION[unit] !== UNIT_DIMENSION[display]) return null
+  const numerator = BigInt(amountMinor) * 1_000_000n * UNIT_PICO[display]
+  const denominator = BigInt(qtyMilli) * UNIT_PICO[unit]
+  if (denominator === 0n) return null
+  return (numerator + denominator / 2n) / denominator
+}
+
+/** Formats a milli-minor-unit price in the currency's own notation. */
+export function formatUnitPrice(milli: bigint, currency: string): string {
+  try {
+    const format = new Intl.NumberFormat('en', { style: 'currency', currency })
+    const digits = format.resolvedOptions().maximumFractionDigits ?? 2
+    return format.format(Number(milli) / 1000 / 10 ** digits)
+  } catch {
+    return `${formatMilli(milli)} ${currency} minor units`
+  }
+}
+
 export function formatMilli(milli: bigint): string {
   return `${milli / 1000n}.${(milli % 1000n).toString().padStart(3, '0')}`
 }

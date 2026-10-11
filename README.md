@@ -70,6 +70,15 @@ not, because a UK pint is about 20% larger than a US pint.
 Amounts are integers in minor units (øre, cents) so every device hashes the
 same bytes. Currency is never converted inside a record.
 
+Readers see unit prices in the units they know. The verifier defaults to US
+gallons and pounds when the browser's region is the US, and to litres and
+kilograms otherwise, and anyone can switch (litre, US or imperial gallon and
+pint; kilogram, pound, ounce). UK rules require unit prices per litre or
+kilogram, with pints only as a supplementary figure; US official statistics
+report milk per gallon. This is display only: records keep the quantity
+exactly as printed. The CLI does the same with
+`veritas unit-price <signed.json> [l|us_gal|us_pt|imp_gal|imp_pt|kg|lb|oz]`.
+
 ## Kaspa conventions
 
 Veritas issues no token. It follows the Kaspa Calls for Conventions

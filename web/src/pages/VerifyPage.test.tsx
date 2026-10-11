@@ -13,9 +13,9 @@ const demo = { record: JSON.stringify(record), receipt: JSON.stringify(receipt),
 describe('VerifyPage', () => {
   it('shows YES with the per-litre price for the US gallon demo', () => {
     const result = runVerification(demo)
-    const html = renderToStaticMarkup(<VerdictView verdict={result.verdict} signed={result.signed} />)
+    const html = renderToStaticMarkup(<VerdictView verdict={result.verdict} signed={result.signed} displayUnit="l" />)
     expect(html).toContain('YES')
-    expect(html).toContain('113.858 USD minor units per litre')
+    expect(html).toContain('$1.14 per litre')
     expect(html).toContain('independently archived page')
   })
 
@@ -28,6 +28,16 @@ describe('VerifyPage', () => {
 
   it('handles invalid JSON', () => {
     expect(runVerification({ ...demo, receipt: '{' }).verdict).toEqual({ ok: false, reason: 'One of the files is not valid JSON.' })
+  })
+})
+
+describe('VerdictView display units', () => {
+  it('shows the price in the chosen unit', () => {
+    const result = runVerification(demo)
+    const html = renderToStaticMarkup(<VerdictView verdict={result.verdict} signed={result.signed} displayUnit="us_gal" />)
+    expect(html).toContain('$4.31 per US gallon')
+    const pint = renderToStaticMarkup(<VerdictView verdict={result.verdict} signed={result.signed} displayUnit="imp_pt" />)
+    expect(pint).toContain('$0.65 per imperial pint')
   })
 })
 
