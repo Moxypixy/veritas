@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 
 import Navigation from '../Navigation'
 import { stripImageMetadata } from '../veritas/evidence'
@@ -132,6 +132,9 @@ export default function AttestPage() {
     source: 'live',
   })
   const [evidence, setEvidence] = useState<{ hash: Uint8Array; file: Blob } | null>(null)
+  const [cleaning, setCleaning] = useState(false)
+  // Each selection gets a token; only the latest selection's result is kept.
+  const evidenceToken = useRef(0)
   const [signed, setSigned] = useState<SignedRecord | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -160,15 +163,26 @@ export default function AttestPage() {
   }
 
   async function hashEvidence(file: File | undefined) {
+    const token = ++evidenceToken.current
     setSigned(null)
     setEvidence(null)
-    if (!file) return
+    setMessage(null)
+    if (!file) {
+      setCleaning(false)
+      return
+    }
+    setCleaning(true)
     try {
       // Hash the cleaned copy, never the original: the original may carry GPS.
       const cleaned = await stripImageMetadata(file)
-      setEvidence({ hash: kccHash(new Uint8Array(await cleaned.arrayBuffer())), file: cleaned })
+      const hash = kccHash(new Uint8Array(await cleaned.arrayBuffer()))
+      if (token === evidenceToken.current) setEvidence({ hash, file: cleaned })
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'The photo could not be cleaned, so it was not used.')
+      if (token === evidenceToken.current) {
+        setMessage(error instanceof Error ? error.message : 'The photo could not be cleaned, so it was not used.')
+      }
+    } finally {
+      if (token === evidenceToken.current) setCleaning(false)
     }
   }
 
@@ -176,6 +190,10 @@ export default function AttestPage() {
     event.preventDefault()
     if (!provider || !account) {
       setMessage('Connect Kaspire first; your attester key is your Kaspire public key.')
+      return
+    }
+    if (cleaning) {
+      setMessage('Wait until the photo has been cleaned.')
       return
     }
     setBusy(true)
@@ -287,7 +305,7 @@ export default function AttestPage() {
           )}
         </fieldset>
 
-        <button type="submit" disabled={busy || !account}>Sign with Kaspire</button>
+        <button type="submit" disabled={busy || cleaning || !account}>{cleaning ? 'Cleaning photo…' : 'Sign with Kaspire'}</button>
 
         <div role="status" aria-live="polite">
           {message && <p className="status">{message}</p>}

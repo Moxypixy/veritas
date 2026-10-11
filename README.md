@@ -58,8 +58,9 @@ Veritas proves who claimed what, and when. It does not prove a claim is true.
   re-encodes the image to pixels only and refuses any output that still
   contains EXIF, XMP, IPTC or comment data. Only the cleaned copy's hash
   enters the record; the attester keeps that cleaned copy. Verified in
-  Chromium 141 with a GPS-tagged JPEG and PNG; other browsers rely on the
-  built-in check, which rejects any output that still has metadata.
+  Chromium 141 with a GPS-tagged JPEG and PNG. In other browsers the
+  built-in check still rejects output containing EXIF, XMP, IPTC or comment
+  blocks (and PNG text/time chunks); it does not inspect other metadata.
 - Place is an area (municipality or region) by default. The shop name is
   stored only if the attester opts in, because exact shops across many
   records can point to where someone lives.

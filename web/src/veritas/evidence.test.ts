@@ -48,9 +48,19 @@ describe('findMetadata', () => {
     expect(findMetadata(jpeg).sort()).toEqual(['jpeg-comment', 'jpeg-exif', 'jpeg-iptc', 'jpeg-xmp'])
   })
 
-  it('stops at the start of scan, so image data is never misread', () => {
-    // Bytes after SOS look like an EXIF segment but are compressed pixels.
-    expect(findMetadata(bytes(SOI, JFIF, SOS, segment(0xe1, 'Exif\0\0')))).toEqual([])
+  it('skips scan data, including stuffed bytes and restart markers', () => {
+    const scan = [0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56] // FF00 stuffing, RST0
+    expect(findMetadata(bytes(SOI, JFIF, SOS, scan, [0xff, 0xd9]))).toEqual([])
+  })
+
+  it('finds metadata placed between scans of a progressive JPEG', () => {
+    const scan = [0x12, 0xff, 0x00, 0x34]
+    const jpeg = bytes(SOI, JFIF, SOS, scan, segment(0xe1, 'Exif\0\0MM\0*'), SOS, scan, segment(0xfe, 'hi'), [0xff, 0xd9])
+    expect(findMetadata(jpeg).sort()).toEqual(['jpeg-comment', 'jpeg-exif'])
+  })
+
+  it('fails closed on a malformed JPEG', () => {
+    expect(findMetadata(bytes(SOI, [0x00, 0x01, 0x02]))).toEqual(['unknown-format'])
   })
 
   it('flags PNG eXIf, text and time chunks', () => {

@@ -32,16 +32,23 @@ export function findMetadata(bytes: Uint8Array): MetadataFinding[] {
 }
 
 function jpegFindings(bytes: Uint8Array): MetadataFinding[] {
+  // Walk every marker segment, including those between scans: progressive
+  // JPEGs may place APPn or COM segments after the first scan.
   const found = new Set<MetadataFinding>()
   let offset = 2
-  while (offset + 4 <= bytes.length) {
-    if (bytes[offset] !== 0xff) break
+  while (offset + 2 <= bytes.length) {
+    if (bytes[offset] !== 0xff) return [...found, 'unknown-format'] // malformed: fail closed
     const marker = bytes[offset + 1]
-    if (marker === 0xd9 || marker === 0xda) break // end of image / start of scan
+    if (marker === 0xff) {
+      offset += 1 // fill byte before a marker
+      continue
+    }
+    if (marker === 0xd9) break // end of image
     if (marker >= 0xd0 && marker <= 0xd7) {
       offset += 2
       continue
     }
+    if (offset + 4 > bytes.length) return [...found, 'unknown-format']
     const length = (bytes[offset + 2] << 8) | bytes[offset + 3]
     const body = offset + 4
     if (marker === 0xe1) {
@@ -54,8 +61,22 @@ function jpegFindings(bytes: Uint8Array): MetadataFinding[] {
       found.add('jpeg-comment')
     }
     offset += 2 + length
+    if (marker === 0xda) offset = skipEntropyData(bytes, offset)
   }
   return [...found]
+}
+
+/** Skips entropy-coded scan data. Inside it, 0xFF is followed by 0x00 (a
+ *  stuffed byte) or a restart marker; any other marker ends the scan. */
+function skipEntropyData(bytes: Uint8Array, offset: number): number {
+  while (offset + 1 < bytes.length) {
+    if (bytes[offset] === 0xff) {
+      const next = bytes[offset + 1]
+      if (next !== 0x00 && !(next >= 0xd0 && next <= 0xd7)) return offset
+    }
+    offset += 1
+  }
+  return bytes.length
 }
 
 function pngFindings(bytes: Uint8Array): MetadataFinding[] {
