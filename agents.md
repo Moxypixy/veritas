@@ -23,7 +23,10 @@ These rules override everything below.
 
 - Do not hallucinate. Every statement, design choice and line of code must be
   verified against the current sources for Kaspa (rusty-kaspa, KIPs, KCCs,
-  docs.kaspa.org), Silverscript and Argent before it is used or stated.
+  docs.kaspa.org) and Silverscript before it is used or stated. Argent is not
+  used in this repository; when Argent is consulted as a design reference or
+  cited, verify against the current upstream repository
+  (michaelsutton/argent).
 - Check for recent updates to those sources before relying on them; pinned
   versions in this repository must be checked against upstream when touched.
 - Follow established best practice at all times.
@@ -40,13 +43,19 @@ state their assumptions, and stop and ask when unsure.
   margin of sampling error, or any claim about a wider population, for them.
   AAPOR: "it is impossible to develop statistically valid margins of
   sampling error from nonprobability surveys."
-- Policy: **precision only**. Uncertainty shown for a cell (item, region,
-  period) describes the reports actually collected, and is labelled as such.
-- For a median, use the distribution-free order-statistic (binomial)
-  confidence interval. Fix the interval rule before looking at the data. Do
-  not bootstrap the median; it is unreliable at small sample sizes.
-- Count each attester once per cell, so observations are as independent as
-  the method assumes; state that the sample is not random.
+- Policy: **describe the collected reports only**. For a cell (item, region,
+  period) show descriptive statistics of the reports actually collected:
+  number of distinct attesters, median, spread (e.g. interquartile range)
+  and freshness, labelled as describing those reports and nothing wider.
+  The median of the collected reports is exact; it has no sampling
+  uncertainty to show.
+- Do not show confidence intervals. Interval methods, including the
+  distribution-free order-statistic interval for a median, give coverage for
+  a population parameter only under a random-sampling model, which opt-in
+  reports do not have. Any interval requires a defined inferential target and
+  sampling model, approved by the project owner first.
+- Count each attester once per cell to limit duplication. This does not make
+  the sample random or independent; say so where results are shown.
 - Do not invent parameters (spreads, thresholds, sample sizes). Derive them
   from data or a cited source, and show the derivation.
 
