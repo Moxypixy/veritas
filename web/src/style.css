@@ -37,7 +37,7 @@ fieldset { border: 0; border-top: 1px solid #d5dfd9; margin: 0; padding: 1.5rem 
 fieldset + fieldset { margin-top: 1.5rem; }
 legend { font-weight: 700; padding: 0 .25rem 0 0; }
 label { display: block; font-weight: 650; margin-top: 1rem; }
-input[type="number"], select { border: 1px solid #6f8178; display: block; margin-top: .4rem; min-height: 2.75rem; padding: .5rem .65rem; width: 100%; }
+input[type="number"], input[type="date"], select { border: 1px solid #6f8178; display: block; margin-top: .4rem; min-height: 2.75rem; padding: .5rem .65rem; width: 100%; }
 .help { color: #48574f; font-size: .92rem; margin-top: .35rem; }
 .radio-group { display: flex; flex-wrap: wrap; gap: 1rem; }
 .radio-group label, .check-row { align-items: flex-start; display: flex; font-weight: 400; gap: .6rem; }
@@ -82,3 +82,4 @@ textarea:focus-visible, input[type="text"]:focus-visible, input[type="file"]:foc
 .verdict-yes h2 { color: #14513a; }
 .verdict-no { background: #fbeaea; border: 2px solid #a12a2a; }
 .verdict-no h2 { color: #8a1f1f; }
+button:disabled { background: #c9d3ce; border-color: #c9d3ce; color: #3d4a43; cursor: not-allowed; }

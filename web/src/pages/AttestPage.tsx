@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 
 import Navigation from '../Navigation'
+import { stripImageMetadata } from '../veritas/evidence'
 import {
   connectKaspire,
   missingWalletMessage,
@@ -39,7 +40,11 @@ export type Draft = {
   currency: string
   quantity: string
   unit: Unit
-  place: string
+  /** Municipality or region. Stored by default; keep it coarse. */
+  area: string
+  /** Shop name; stored only when includeShop is true. */
+  shop: string
+  includeShop: boolean
   observedOn: string
   source: Source
 }
@@ -66,6 +71,15 @@ export function toQtyMilli(quantity: string): number {
   return Number(match[1]) * 1000 + Number((match[2] ?? '').padEnd(3, '0') || 0)
 }
 
+/** The stored place: the area, plus the shop only if the attester opts in.
+ *  Shop-level detail makes repeated records easier to link to one person. */
+export function composePlace(draft: Pick<Draft, 'area' | 'shop' | 'includeShop'>): string {
+  const area = draft.area.trim()
+  const shop = draft.shop.trim()
+  if (!draft.includeShop || !shop) return area
+  return area ? `${area} · ${shop}` : shop
+}
+
 /** Builds the record exactly as Rust validates and hashes it. */
 export function draftToRecord(draft: Draft, attester: string, salt: Uint8Array, evidence: Uint8Array | null): PriceRecord {
   const currency = draft.currency.trim().toUpperCase()
@@ -75,7 +89,7 @@ export function draftToRecord(draft: Draft, attester: string, salt: Uint8Array, 
     currency,
     qty_milli: toQtyMilli(draft.quantity),
     unit: draft.unit,
-    place: draft.place.trim(),
+    place: composePlace(draft),
     observed_on: draft.observedOn,
     source: draft.source,
     evidence: bytesToHex(evidence ?? new Uint8Array(32)),
@@ -88,7 +102,11 @@ export function draftToRecord(draft: Draft, attester: string, salt: Uint8Array, 
 }
 
 function downloadJson(name: string, value: unknown) {
-  const url = URL.createObjectURL(new Blob([`${JSON.stringify(value, null, 2)}\n`], { type: 'application/json' }))
+  downloadBlob(name, new Blob([`${JSON.stringify(value, null, 2)}\n`], { type: 'application/json' }))
+}
+
+function downloadBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
   link.download = name
@@ -107,11 +125,16 @@ export default function AttestPage() {
     currency: 'DKK',
     quantity: '1',
     unit: 'l',
-    place: '',
+    area: '',
+    shop: '',
+    includeShop: false,
     observedOn: today(),
     source: 'live',
   })
-  const [evidence, setEvidence] = useState<Uint8Array | null>(null)
+  const [evidence, setEvidence] = useState<{ hash: Uint8Array; file: Blob } | null>(null)
+  const [cleaning, setCleaning] = useState(false)
+  // Each selection gets a token; only the latest selection's result is kept.
+  const evidenceToken = useRef(0)
   const [signed, setSigned] = useState<SignedRecord | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -140,8 +163,27 @@ export default function AttestPage() {
   }
 
   async function hashEvidence(file: File | undefined) {
+    const token = ++evidenceToken.current
     setSigned(null)
-    setEvidence(file ? kccHash(new Uint8Array(await file.arrayBuffer())) : null)
+    setEvidence(null)
+    setMessage(null)
+    if (!file) {
+      setCleaning(false)
+      return
+    }
+    setCleaning(true)
+    try {
+      // Hash the cleaned copy, never the original: the original may carry GPS.
+      const cleaned = await stripImageMetadata(file)
+      const hash = kccHash(new Uint8Array(await cleaned.arrayBuffer()))
+      if (token === evidenceToken.current) setEvidence({ hash, file: cleaned })
+    } catch (error) {
+      if (token === evidenceToken.current) {
+        setMessage(error instanceof Error ? error.message : 'The photo could not be cleaned, so it was not used.')
+      }
+    } finally {
+      if (token === evidenceToken.current) setCleaning(false)
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -150,10 +192,14 @@ export default function AttestPage() {
       setMessage('Connect Kaspire first; your attester key is your Kaspire public key.')
       return
     }
+    if (cleaning) {
+      setMessage('Wait until the photo has been cleaned.')
+      return
+    }
     setBusy(true)
     setMessage(null)
     try {
-      const record = draftToRecord(draft, account.publicKey, crypto.getRandomValues(new Uint8Array(16)), evidence)
+      const record = draftToRecord(draft, account.publicKey, crypto.getRandomValues(new Uint8Array(16)), evidence?.hash ?? null)
       const text = attestationMessage(record, recordLeaf(record))
       const signature = await signKip5(provider, account, text)
       setSigned({ record, signature: bytesToHex(signature) })
@@ -221,8 +267,20 @@ export default function AttestPage() {
           </select>
           <p id="unit-help" className="help">us_pt and imp_pt differ by about 20%; pick the one on the label.</p>
 
-          <label htmlFor="place">Place (optional)</label>
-          <input id="place" type="text" placeholder="Shop and city, or a region" value={draft.place} onChange={(e) => update('place', e.currentTarget.value)} />
+          <label htmlFor="area">Area (optional)</label>
+          <input id="area" type="text" placeholder="Municipality or region, e.g. København" aria-describedby="area-help" value={draft.area} onChange={(e) => update('area', e.currentTarget.value)} />
+          <p id="area-help" className="help">Keep it coarse. Exact shops across many records can reveal where you live.</p>
+
+          <label className="check-row">
+            <input type="checkbox" checked={draft.includeShop} onChange={(e) => update('includeShop', e.currentTarget.checked)} />
+            <span>Also record the shop name (more identifying)</span>
+          </label>
+          {draft.includeShop && (
+            <>
+              <label htmlFor="shop">Shop</label>
+              <input id="shop" type="text" value={draft.shop} onChange={(e) => update('shop', e.currentTarget.value)} />
+            </>
+          )}
 
           <label htmlFor="observed">Date</label>
           <input id="observed" type="date" required value={draft.observedOn} onChange={(e) => update('observedOn', e.currentTarget.value)} />
@@ -235,13 +293,25 @@ export default function AttestPage() {
           </select>
 
           <label htmlFor="evidence">Receipt or shelf photo (optional)</label>
-          <input id="evidence" type="file" accept="image/*,application/pdf" aria-describedby="evidence-help" onChange={(e) => void hashEvidence(e.currentTarget.files?.[0])} />
-          <p id="evidence-help" className="help">Only its hash goes into the record. The photo stays on your device; keep it with the signed file.</p>
+          <input id="evidence" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="evidence-help" onChange={(e) => void hashEvidence(e.currentTarget.files?.[0])} />
+          <p id="evidence-help" className="help">
+            The photo is cleaned on your device first: location, camera and other metadata are removed. Only the cleaned copy's hash goes into the
+            record, and the photo never leaves your device. Keep the cleaned copy, not the original; only it matches the record.
+          </p>
+          {evidence && (
+            <button type="button" className="secondary" onClick={() => downloadBlob('evidence-cleaned.jpg', evidence.file)}>
+              Download cleaned photo
+            </button>
+          )}
         </fieldset>
 
-        <button type="submit" disabled={busy || !account}>Sign with Kaspire</button>
+        <button type="submit" disabled={busy || cleaning || !account}>{cleaning ? 'Cleaning photo…' : 'Sign with Kaspire'}</button>
 
         <div role="status" aria-live="polite">
+          {cleaning && <p className="status">Cleaning the photo on your device…</p>}
+          {!cleaning && evidence && !message && !signed && (
+            <p className="status">Photo cleaned. Download the cleaned copy to keep with your record.</p>
+          )}
           {message && <p className="status">{message}</p>}
           {signed && (
             <section className="verdict verdict-yes" aria-labelledby="signed-heading">
