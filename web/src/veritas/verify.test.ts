@@ -131,5 +131,8 @@ describe('display units', () => {
   it('formats prices in the currency notation', () => {
     expect(formatUnitPrice(431_000n, 'USD')).toBe('$4.31')
     expect(formatUnitPrice(113_858n, 'USD')).toBe('$1.14')
+    expect(formatUnitPrice(250_400n, 'JPY')).toBe('¥250')
+    // Beyond Number's exact range: every digit must survive.
+    expect(formatUnitPrice(123_456_789_012_345_678_901n, 'USD')).toBe('$1,234,567,890,123,456.79')
   })
 })

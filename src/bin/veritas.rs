@@ -30,7 +30,7 @@ const USAGE: &str = "usage:
   veritas attest <key-file> <draft.json> <signed.json>
   veritas batch <anchor-log.json> <out-dir> <signed.json>...
   veritas verify <signed.json> <receipt.json> <anchor-log.json> <live-acc-hex>
-  veritas unit-price <signed.json> [display-unit, e.g. l, us_gal, imp_pt]";
+  veritas unit-price <signed.json> [l|ml|us_gal|us_pt|imp_gal|imp_pt|kg|g|lb|oz|each]";
 
 /// A record before attestation: salt and attester are filled in by `attest`.
 #[derive(Deserialize)]

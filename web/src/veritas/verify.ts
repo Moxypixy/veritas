@@ -295,7 +295,12 @@ export function formatUnitPrice(milli: bigint, currency: string): string {
   try {
     const format = new Intl.NumberFormat('en', { style: 'currency', currency })
     const digits = format.resolvedOptions().maximumFractionDigits ?? 2
-    return format.format(Number(milli) / 1000 / 10 ** digits)
+    // Round to whole minor units in bigint, then format an exact decimal
+    // string, so large prices never pass through a lossy Number.
+    const minor = (milli + 500n) / 1000n
+    const scale = 10n ** BigInt(digits)
+    const decimal = digits === 0 ? `${minor}` : `${minor / scale}.${(minor % scale).toString().padStart(digits, '0')}`
+    return format.format(decimal as Intl.StringNumericLiteral)
   } catch {
     return `${formatMilli(milli)} ${currency} minor units`
   }

@@ -77,7 +77,7 @@ pint; kilogram, pound, ounce). UK rules require unit prices per litre or
 kilogram, with pints only as a supplementary figure; US official statistics
 report milk per gallon. This is display only: records keep the quantity
 exactly as printed. The CLI does the same with
-`veritas unit-price <signed.json> [l|us_gal|us_pt|imp_gal|imp_pt|kg|lb|oz]`.
+`veritas unit-price <signed.json> [l|ml|us_gal|us_pt|imp_gal|imp_pt|kg|g|lb|oz|each]`.
 
 ## Kaspa conventions
 
