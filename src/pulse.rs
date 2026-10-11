@@ -1,3 +1,9 @@
+//! Legacy Cost-of-Living Pulse vote commitment (`veritas.colp.v1`).
+//!
+//! Kept byte-for-byte so `veritas-api` and the web client keep producing the
+//! same commitments. The Pulse survey belongs to The Gap; new Veritas work
+//! uses [`crate::record`].
+
 use std::fmt;
 
 use blake2b_simd::Params;

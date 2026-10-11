@@ -15,11 +15,9 @@ function Invoke-Native {
     }
 }
 
-Invoke-Native -Command "cargo" -Arguments @("fmt", "--check")
-Invoke-Native -Command "cargo" -Arguments @("check", "--all-targets", "--all-features")
-Invoke-Native -Command "cargo" -Arguments @("test", "--all-targets", "--all-features")
-Invoke-Native -Command "cargo" -Arguments @("clippy", "--all-targets", "--all-features", "--", "-D", "warnings")
-Invoke-Native -Command "cargo" -Arguments @("run", "--quiet", "--bin", "counter")
+Invoke-Native -Command "cargo" -Arguments @("fmt", "--all", "--check")
+Invoke-Native -Command "cargo" -Arguments @("clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings")
+Invoke-Native -Command "cargo" -Arguments @("test", "--workspace", "--all-features")
 
 if (Test-Path -Path "web" -PathType Container) {
     Push-Location "web"

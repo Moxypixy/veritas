@@ -1,14 +1,17 @@
 # AGENTS.md
 # Project Engineering Instructions
 
-This project builds applications for Kaspa using the experimental Argent
-language together with Rust.
+This project builds Veritas, verifiable price records on Kaspa L1, using
+Silverscript covenants together with Rust and a TypeScript web client.
 
-Argent is experimental and evolving rapidly. Never assume Argent syntax,
-compiler behaviour, runtime behaviour, generated artifacts, APIs, conventions,
-or Kaspa integration details from general knowledge.
+Silverscript (kaspanet/silverscript, pinned to v1.0.0) is the covenant
+language. It is young and evolving. Never assume Silverscript syntax, compiler
+behaviour, ABI artifacts, covenant declaration semantics, or Kaspa (Toccata,
+transaction v1) details from general knowledge.
 
-The repository and the current Argent source code are the source of truth.
+The repository, the pinned Silverscript source and the pinned rusty-kaspa
+revision are the source of truth. Argent is no longer used; treat it only as
+a design reference for multi-contract systems.
 
 ---
 
@@ -57,7 +60,7 @@ For substantial features:
 11. Verify the result before declaring completion.
 
 Do not start implementing significant architectural changes without first
-understanding how the existing Argent and Rust code works.
+understanding how the existing Silverscript and Rust code works.
 
 For bugs, use systematic debugging rather than speculative fixes.
 
@@ -71,23 +74,23 @@ simply to make a task appear complete.
 For this project, use sources in this order:
 
 1. The current local project source code.
-2. The current local Argent repository.
-3. Current official Argent documentation/examples.
+2. The pinned Silverscript source (docs/TUTORIAL.md, docs/DECL.md, tests).
+3. The Toccata developer guide (docs.kaspa.org/toccata) and current KCCs.
 4. Current official Kaspa repositories/documentation.
 5. Current dependency documentation via Context7.
 6. General model knowledge only when the above do not answer the question.
 
-Argent is experimental.
+Silverscript and Toccata are new.
 
-NEVER invent Argent syntax, compiler features, APIs, runtime behaviour,
+NEVER invent Silverscript syntax, compiler features, APIs, runtime behaviour,
 transaction semantics, covenant behaviour, or interoperability.
 
 If uncertain:
 
-- inspect the current Argent repository;
-- inspect existing `.ag` examples;
-- inspect compiler tests;
-- inspect generated artifacts;
+- inspect the pinned Silverscript repository;
+- inspect existing `.sil` examples and its compiler tests;
+- compile with `silverc` and inspect the ABI artifact;
+- execute the script in rusty-kaspa's engine (see `crates/veritas-anchor/tests`);
 - consult current upstream documentation;
 - state uncertainty explicitly if behaviour cannot be verified.
 
@@ -97,30 +100,47 @@ Do not use outdated remembered APIs when current documentation is available.
 
 ---
 
-# 4. Existing Argent Template Architecture
+# 4. Repository Architecture
 
 Preserve the repository's basic separation unless there is a strong reason to
 change it.
 
 Current responsibilities:
 
-- `ag/`
-  Argent applications and covenant/domain logic.
-- `src/bin/`
-  Rust executables responsible for transaction construction and application
-  execution/integration.
-- `src/lib.rs`
-  Shared Rust utilities and deterministic local fixtures.
-- `build/`
-  Generated Argent build artifacts.
+- `covenants/`
+  Silverscript covenants. `anchor.sil` holds the append-only accumulator.
+- `src/` (crate `veritas`)
+  Pure Rust core: price records, units, Merkle batches, accumulator,
+  receipts and verification. No Kaspa or Silverscript dependencies.
+- `src/bin/veritas.rs`
+  Demo CLI: keygen, attest, batch, verify, unit-price.
+- `crates/veritas-anchor/`
+  Compiles `anchor.sil` and builds its sigscripts; tests run the covenant in
+  rusty-kaspa's script engine.
+- `crates/veritas-api/`, `crates/veritas-inflation/`
+  Legacy Cost-of-Living Pulse API and official-statistics worker (to move to
+  The Gap).
+- `web/`
+  React client. `src/veritas/verify.ts` mirrors the Rust verifier;
+  `src/wallet/kaspire.ts` is the only wallet integration (Kaspire,
+  `window.kaspire`, KIP-5 `signMessage`).
+- `covenants/anchor.abi.json`, `covenants/anchor.template-hash.txt`
+  Published KCC-1 Program ABI and template hash; regenerate with
+  `cargo run -p veritas-anchor --bin anchor-abi` after any covenant change.
+
+Conventions to keep: KCC-1 (BLAKE3 Hash, state encoding via Silverscript),
+KCC-2 canonical scheme bytes for authorities, KCC-20 witness layouts where an
+authority is checked, KIP-5 for message signatures. Veritas issues no token.
+- `examples/demo/`
+  Committed demo records; Rust and web tests both verify them.
 
 Do not move domain rules into frontend code.
 
-Do not duplicate Argent validation rules in a frontend and treat the frontend
-copy as authoritative.
+The browser verifier is a convenience mirror of `src/verify.rs`; both are
+tested against `examples/demo`. If they disagree, Rust and the covenant win.
 
-The Argent program is authoritative for rules that must be enforced by the
-Kaspa-side application.
+The covenant is authoritative for rules that must be enforced on Kaspa;
+`veritas::accumulator::next_acc` must stay in step with `anchor.sil`.
 
 Rust should handle orchestration, integration, transaction construction, data
 conversion, and supporting infrastructure.
@@ -129,15 +149,15 @@ Frontend applications should handle presentation and user interaction.
 
 ---
 
-# 5. Experimental Argent Safety Rules
+# 5. Covenant Safety Rules
 
-Argent must be treated as experimental software.
+Silverscript and Toccata covenants must be treated as young software.
 
-Before changing Argent code:
+Before changing covenant code:
 
-1. Inspect similar working `.ag` files.
-2. Verify syntax against the current compiler.
-3. Verify assumptions against the current Argent checkout.
+1. Inspect similar working `.sil` files in the Silverscript repository.
+2. Verify syntax against the pinned compiler.
+3. Verify assumptions against the pinned Silverscript and rusty-kaspa source.
 4. Build the program.
 5. Inspect the generated artifact when relevant.
 6. Test expected and invalid paths.
@@ -145,7 +165,9 @@ Before changing Argent code:
 Do not infer features from Rust, Solidity, Move, Bitcoin Script, or another
 smart-contract language.
 
-Do not assume Solidity/EVM concepts apply to Argent.
+Do not assume Solidity/EVM concepts apply to Kaspa covenants. Model state as
+UTXO transitions; covenant IDs gate admission but do not enforce app rules,
+and the successor outputs must be validated, not just the inputs.
 
 Do not assume account-model semantics.
 
@@ -157,12 +179,12 @@ When the compiler rejects something, understand why before working around it.
 
 ---
 
-# 6. Argent Code
+# 6. Covenant Code
 
-Argent code should:
+Covenant code should:
 
 - model domain rules explicitly;
-- keep actors, state and allowed transitions understandable;
+- keep state fields and allowed transitions understandable;
 - minimise hidden assumptions;
 - make invalid state transitions impossible where practical;
 - validate untrusted inputs;
@@ -223,7 +245,7 @@ At external boundaries:
 - convert into domain types early;
 - return structured errors.
 
-Keep Argent-generated artifact handling isolated from unrelated application
+Keep Silverscript artifact handling isolated from unrelated application
 logic.
 
 ---
@@ -253,7 +275,7 @@ Do not settle for "it compiles".
 
 # 9. Frontend Independence
 
-The core Argent/Rust application must not depend on one particular frontend.
+The core Rust/Silverscript application must not depend on one particular frontend.
 
 Frontend implementations may include:
 
@@ -265,7 +287,7 @@ Frontend implementations may include:
 
 Keep the domain/integration boundary independent of UI technology.
 
-Prefer an explicit interface between frontend clients and the Rust/Argent
+Prefer an explicit interface between frontend clients and the Rust/Silverscript
 application.
 
 Do not embed React-specific, React-Native-specific, browser-specific, or
@@ -385,7 +407,7 @@ Prefer:
 
 Use a type checker where practical.
 
-Do not duplicate authoritative Argent business rules in Python.
+Do not duplicate authoritative covenant rules in Python.
 
 Python clients must treat responses and external data as untrusted.
 
@@ -402,7 +424,7 @@ Validate all external input at the Rust boundary.
 
 Frontend validation improves UX but is NEVER a security boundary.
 
-Avoid leaking internal Argent artifact representation directly into UI code.
+Avoid leaking internal Silverscript artifact representation directly into UI code.
 
 Create stable application/domain representations where appropriate.
 
@@ -448,7 +470,8 @@ Users should understand what they are authorising.
 
 Do not assume this template currently connects to the Kaspa network.
 
-The starter template currently demonstrates Argent using its local runtime.
+The v0 code compiles and tests the anchor covenant against rusty-kaspa's
+script engine locally. Nothing yet submits the anchoring transaction.
 
 Unless network integration has explicitly been added and verified, do not claim
 that the application:
@@ -467,7 +490,7 @@ layer and verify it against current Kaspa APIs.
 
 # 17. Generated Code and Artifacts
 
-Generated Argent artifacts are outputs, not hand-maintained source.
+Generated Silverscript ABI artifacts are outputs, not hand-maintained source.
 
 Do not manually edit generated files unless the toolchain explicitly requires
 it.
@@ -496,7 +519,7 @@ Cover:
 - serialization/deserialization boundaries;
 - regressions for discovered bugs.
 
-For security-critical Argent logic, rejection tests are as important as success
+For security-critical covenant logic, rejection tests are as important as success
 tests.
 
 Do not remove failing tests merely to make CI pass.
@@ -509,13 +532,13 @@ Do not weaken assertions without understanding the reason.
 
 Use the repository's existing commands where applicable.
 
-Argent:
+Silverscript (from a checkout of kaspanet/silverscript at v1.0.0):
 
-    ./argentc build ag/<application>.ag
+    cargo run -p silverscript-lang --bin silverc -- covenants/anchor.sil --constructor-args args.json -c
 
-Inspect generated Argent output when relevant:
+The covenant itself is compiled and executed by:
 
-    ./argentc inspect build/argent
+    cargo test -p veritas-anchor
 
 Rust:
 
@@ -529,7 +552,7 @@ Run a binary when appropriate:
 
 Run repository checks:
 
-    ./check
+    ./check.sh        (or check-win.ps1 on Windows)
 
 If frontend tooling is present, also run its formatter, linter, type checker and
 tests.
@@ -579,7 +602,7 @@ Before completing security-sensitive features, review:
 - race conditions;
 - error behaviour.
 
-For Argent code, additionally review whether a maliciously constructed
+For covenant code, additionally review whether a maliciously constructed
 transaction could satisfy the covenant while violating intended application
 behaviour.
 
@@ -591,7 +614,7 @@ Comment WHY, not obvious syntax.
 
 Document:
 
-- unusual Argent behaviour;
+- unusual Silverscript or Kaspa script behaviour;
 - protocol assumptions;
 - covenant invariants;
 - security decisions;
@@ -626,12 +649,12 @@ A task is not complete because code was generated or because it compiles.
 Before declaring completion:
 
 1. Verify the requirement.
-2. Review Argent assumptions against the current toolchain.
-3. Build all changed Argent programs.
+2. Review Silverscript and Kaspa assumptions against the pinned toolchain.
+3. Run `cargo test -p veritas-anchor` after any covenant change.
 4. Run Rust formatting.
 5. Run Clippy with warnings denied.
 6. Run Rust tests.
-7. Run `./check`.
+7. Run `./check.sh` or `check-win.ps1`.
 8. Run frontend lint/typecheck/tests when applicable.
 9. Review the complete diff.
 10. Check security-sensitive changes separately.

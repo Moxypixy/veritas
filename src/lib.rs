@@ -1,76 +1,36 @@
-mod commitment;
-mod vote_flow;
+//! Veritas: verifiable price records anchored on Kaspa L1.
+//!
+//! The chain proves *when*; the holder proves *what*. A price record is hashed
+//! with the KCC-1 Hash (BLAKE3) and signed on the attester's device with KIP-5,
+//! batched into a Merkle tree, and each
+//! batch root is folded into an append-only accumulator that a single Silverscript
+//! covenant UTXO carries on Kaspa (`covenants/anchor.sil`).
+//!
+//! Module map:
+//! - [`units`]: printed quantities and exact unit conversion.
+//! - [`record`]: the price record, its canonical encoding and KIP-5 signature.
+//! - [`kip5`]: Kaspa personal-message signing (what wallets like Kaspire sign).
+//! - [`merkle`]: per-batch Merkle tree and inclusion proofs.
+//! - [`accumulator`]: the hash chain of batch roots held by the covenant.
+//! - [`receipt`]: what an attester keeps next to their record.
+//! - [`verify`]: the yes/no check anyone can run.
+//! - [`pulse`]: legacy cost-of-living vote commitment used by `veritas-api`.
 
-pub use commitment::{
-    COMMITMENT_DOMAIN, CommitmentError, VoteAnswer, canonical_bytes, commitment_hash,
-};
-pub use vote_flow::{LocalVoteFixture, load_pulse_artifact};
+pub mod accumulator;
+pub mod hash;
+pub mod hex;
+pub mod kip5;
+pub mod merkle;
+pub mod pulse;
+pub mod receipt;
+pub mod record;
+pub mod units;
+pub mod verify;
 
-use kaspa_consensus_core::{
-    hashing::{
-        sighash::{SigHashReusedValuesUnsync, calc_schnorr_signature_hash},
-        sighash_type::SIG_HASH_ALL,
-    },
-    tx::{
-        MutableTransaction, ScriptPublicKey, Transaction, TransactionId, TransactionOutpoint,
-        UtxoEntry,
-    },
-};
-use secp256k1::{Keypair, Secp256k1, SecretKey};
-
-pub type DemoResult<T> = Result<T, Box<dyn std::error::Error>>;
-
-/// Returns a deterministic outpoint for local examples.
-pub fn demo_outpoint(byte: u8, index: u32) -> TransactionOutpoint {
-    TransactionOutpoint {
-        transaction_id: TransactionId::from_bytes([byte; 32]),
-        index,
-    }
-}
-
-/// Returns a deterministic keypair for local examples.
-pub fn demo_keypair(byte: u8) -> Keypair {
-    let secret_key = SecretKey::from_slice(&[byte; 32]).expect("demo secret key is valid");
-    Keypair::from_secret_key(&Secp256k1::new(), &secret_key)
-}
-
-/// Returns a deterministic keypair and its 32-byte x-only public key.
-pub fn demo_keys(byte: u8) -> (Keypair, Vec<u8>) {
-    let keypair = demo_keypair(byte);
-    let public_key = keypair.x_only_public_key().0.serialize().to_vec();
-    (keypair, public_key)
-}
-
-/// Returns a simple local funding UTXO.
-pub fn demo_funding_utxo(value: u64) -> UtxoEntry {
-    UtxoEntry::new(
-        value,
-        ScriptPublicKey::from_vec(0, vec![0x51]),
-        0,
-        false,
-        None,
-    )
-}
-
-/// Signs one transaction input with `SIGHASH_ALL`.
-pub fn sign_input<T: AsRef<Transaction>>(
-    tx: &MutableTransaction<T>,
-    input_idx: usize,
-    keypair: &Keypair,
-) -> Vec<u8> {
-    let reused_values = SigHashReusedValuesUnsync::new();
-    let sig_hash =
-        calc_schnorr_signature_hash(&tx.as_verifiable(), input_idx, SIG_HASH_ALL, &reused_values);
-    let message = secp256k1::Message::from_digest(sig_hash.as_bytes());
-    let signature = keypair.sign_schnorr(message);
-    let mut encoded = signature.as_ref().to_vec();
-    encoded.push(SIG_HASH_ALL.to_u8());
-    encoded
-}
-
-/// Prints a compact summary suitable for a live demo.
-pub fn print_tx_summary(tx: &Transaction) {
-    println!("transaction: {}", tx.id());
-    println!("inputs: {}", tx.inputs.len());
-    println!("outputs: {}", tx.outputs.len());
-}
+pub use accumulator::{AnchorLog, GENESIS_ACC, fold, next_acc};
+pub use merkle::{Batch, MerkleError, Side, Step, root_from_proof};
+pub use pulse::{COMMITMENT_DOMAIN, CommitmentError, VoteAnswer, canonical_bytes, commitment_hash};
+pub use receipt::Receipt;
+pub use record::{PriceRecord, RecordError, SignedRecord, Source, attestation_message};
+pub use units::{Dimension, Unit};
+pub use verify::{Confirmation, NoReason, Verdict, verify};

@@ -1,4 +1,4 @@
-import type { Challenge } from './kastle'
+import type { Challenge } from './kaspire'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 

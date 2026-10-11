@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import Navigation from '../Navigation'
+
 const REGIONS = [
   { id: 'euro-area', label: 'Euro area' },
   { id: 'united-states', label: 'United States' },
@@ -165,10 +167,7 @@ export default function ChartPage({ loadChart: requestChart = loadChart }: Chart
 
   return (
     <main className="page">
-      <nav className="site-nav" aria-label="Primary navigation">
-        <a href="/">Vote</a>
-        <a href="/chart" aria-current="page">Chart</a>
-      </nav>
+      <Navigation current="chart" />
       <header className="hero">
         <p className="eyebrow">Cost-of-Living Pulse · Kaspa testnet</p>
         <h1>Cost-of-living chart</h1>

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "batch_index": 0,
+  "batch_root": "fad34cb912724e2957fb27ae03fdeb2220a8249588d10accf8f50a310c80e41e",
+  "leaf_index": 1,
+  "proof": [
+    {
+      "side": "left",
+      "hash": "e381c3a0a4162c6e2dda838c99dbdd7ed46c077f3ad1bf5f2465850fa0378e18"
+    }
+  ]
+}
