@@ -2,7 +2,7 @@ import { schnorr } from '@noble/curves/secp256k1.js'
 import { describe, expect, it } from 'vitest'
 
 import { attestationMessage, bytesToHex, foldBatchRoots, kip5Digest, leafNode, recordLeaf, verify } from '../veritas/verify'
-import { draftToRecord, toMinorUnits, toQtyMilli, type Draft } from './AttestPage'
+import { composePlace, draftToRecord, toMinorUnits, toQtyMilli, type Draft } from './AttestPage'
 
 const draft: Draft = {
   item: 'milk.whole.1l.dk',
@@ -10,7 +10,9 @@ const draft: Draft = {
   currency: 'dkk',
   quantity: '1',
   unit: 'l',
-  place: 'Copenhagen',
+  area: 'København',
+  shop: 'Netto Nørrebrogade',
+  includeShop: false,
   observedOn: '2026-10-10',
   source: 'live',
 }
@@ -49,5 +51,11 @@ describe('AttestPage', () => {
   it('rejects an invalid item before anything is signed', () => {
     expect(() => draftToRecord({ ...draft, item: 'Milk' }, '00'.repeat(32), new Uint8Array(16), null)).toThrow(/item/)
   })
-})
 
+  it('stores only the area unless the attester opts in to the shop', () => {
+    expect(draftToRecord(draft, '00'.repeat(32), new Uint8Array(16), null).place).toBe('København')
+    expect(composePlace({ ...draft, includeShop: true })).toBe('København · Netto Nørrebrogade')
+    expect(composePlace({ area: '', shop: 'Netto', includeShop: true })).toBe('Netto')
+    expect(composePlace({ area: '  ', shop: '', includeShop: true })).toBe('')
+  })
+})

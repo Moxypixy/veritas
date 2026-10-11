@@ -52,6 +52,18 @@ holds.
 
 Veritas proves who claimed what, and when. It does not prove a claim is true.
 
+### Privacy
+
+- Evidence photos are cleaned on the device before hashing: the page
+  re-encodes the image to pixels only and refuses any output that still
+  contains EXIF, XMP, IPTC or comment data. Only the cleaned copy's hash
+  enters the record; the attester keeps that cleaned copy. Verified in
+  Chromium 141 with a GPS-tagged JPEG and PNG; other browsers rely on the
+  built-in check, which rejects any output that still has metadata.
+- Place is an area (municipality or region) by default. The shop name is
+  stored only if the attester opts in, because exact shops across many
+  records can point to where someone lives.
+
 ### Units
 
 Quantities are stored exactly as printed (`qty_milli` thousandths of `unit`)
