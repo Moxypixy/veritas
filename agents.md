@@ -15,6 +15,52 @@ a design reference for multi-contract systems.
 
 ---
 
+# 0. Project Rules (set by the project owner)
+
+These rules override everything below.
+
+## 0.1 No unverified claims
+
+- Do not hallucinate. Every statement, design choice and line of code must be
+  verified against the current sources for Kaspa (rusty-kaspa, KIPs, KCCs,
+  docs.kaspa.org) and Silverscript before it is used or stated. Argent is not
+  used in this repository; when Argent is consulted as a design reference or
+  cited, verify against the current upstream repository
+  (michaelsutton/argent).
+- Check for recent updates to those sources before relying on them; pinned
+  versions in this repository must be checked against upstream when touched.
+- Follow established best practice at all times.
+- If something cannot be verified, stop and ask the project owner. Do not
+  guess, and do not present an assumption as fact.
+- When reporting, separate what was verified (and how) from what was not.
+
+## 0.2 Statistical validity
+
+The same rules apply to statistics: use only established, citable methods,
+state their assumptions, and stop and ask when unsure.
+
+- Veritas reports are an opt-in (non-probability) sample. Never present a
+  margin of sampling error, or any claim about a wider population, for them.
+  AAPOR: "it is impossible to develop statistically valid margins of
+  sampling error from nonprobability surveys."
+- Policy: **describe the collected reports only**. For a cell (item, region,
+  period) show descriptive statistics of the reports actually collected:
+  number of distinct attesters, median, spread (e.g. interquartile range)
+  and freshness, labelled as describing those reports and nothing wider.
+  The median of the collected reports is exact; it has no sampling
+  uncertainty to show.
+- Do not show confidence intervals. Interval methods, including the
+  distribution-free order-statistic interval for a median, give coverage for
+  a population parameter only under a random-sampling model, which opt-in
+  reports do not have. Any interval requires a defined inferential target and
+  sampling model, approved by the project owner first.
+- Count each attester once per cell to limit duplication. This does not make
+  the sample random or independent; say so where results are shown.
+- Do not invent parameters (spreads, thresholds, sample sizes). Derive them
+  from data or a cited source, and show the derivation.
+
+---
+
 # 1. Core Principles
 
 Prioritise:
@@ -649,7 +695,9 @@ A task is not complete because code was generated or because it compiles.
 Before declaring completion:
 
 1. Verify the requirement.
-2. Review Silverscript and Kaspa assumptions against the pinned toolchain.
+2. Review Silverscript, Argent and Kaspa assumptions against the pinned
+   toolchain and current upstream (Section 0.1); check any statistics against
+   Section 0.2.
 3. Run `cargo test -p veritas-anchor` after any covenant change.
 4. Run Rust formatting.
 5. Run Clippy with warnings denied.
