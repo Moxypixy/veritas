@@ -15,6 +15,43 @@ a design reference for multi-contract systems.
 
 ---
 
+# 0. Project Rules (set by the project owner)
+
+These rules override everything below.
+
+## 0.1 No unverified claims
+
+- Do not hallucinate. Every statement, design choice and line of code must be
+  verified against the current sources for Kaspa (rusty-kaspa, KIPs, KCCs,
+  docs.kaspa.org), Silverscript and Argent before it is used or stated.
+- Check for recent updates to those sources before relying on them; pinned
+  versions in this repository must be checked against upstream when touched.
+- Follow established best practice at all times.
+- If something cannot be verified, stop and ask the project owner. Do not
+  guess, and do not present an assumption as fact.
+- When reporting, separate what was verified (and how) from what was not.
+
+## 0.2 Statistical validity
+
+The same rules apply to statistics: use only established, citable methods,
+state their assumptions, and stop and ask when unsure.
+
+- Veritas reports are an opt-in (non-probability) sample. Never present a
+  margin of sampling error, or any claim about a wider population, for them.
+  AAPOR: "it is impossible to develop statistically valid margins of
+  sampling error from nonprobability surveys."
+- Policy: **precision only**. Uncertainty shown for a cell (item, region,
+  period) describes the reports actually collected, and is labelled as such.
+- For a median, use the distribution-free order-statistic (binomial)
+  confidence interval. Fix the interval rule before looking at the data. Do
+  not bootstrap the median; it is unreliable at small sample sizes.
+- Count each attester once per cell, so observations are as independent as
+  the method assumes; state that the sample is not random.
+- Do not invent parameters (spreads, thresholds, sample sizes). Derive them
+  from data or a cited source, and show the derivation.
+
+---
+
 # 1. Core Principles
 
 Prioritise:
@@ -649,7 +686,9 @@ A task is not complete because code was generated or because it compiles.
 Before declaring completion:
 
 1. Verify the requirement.
-2. Review Silverscript and Kaspa assumptions against the pinned toolchain.
+2. Review Silverscript, Argent and Kaspa assumptions against the pinned
+   toolchain and current upstream (Section 0.1); check any statistics against
+   Section 0.2.
 3. Run `cargo test -p veritas-anchor` after any covenant change.
 4. Run Rust formatting.
 5. Run Clippy with warnings denied.
