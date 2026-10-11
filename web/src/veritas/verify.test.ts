@@ -10,6 +10,9 @@ import usGallonReceipt from '../../../examples/demo/receipts/milk-us-gallon.rece
 import liveAccFile from '../../../examples/demo/live-acc.txt?raw'
 
 import {
+  defaultDisplayUnit,
+  formatUnitPrice,
+  pricePerUnitMilli,
   attestationMessage,
   bytesToHex,
   kccHash,
@@ -101,5 +104,35 @@ describe('Veritas browser verifier', () => {
     ;(pint.record as { unit: string }).unit = 'pt'
     expect(verify(pint, marchReceipt as Receipt, anchorLog, liveAcc)).toEqual({ ok: false, reason: 'Record is malformed: unknown unit "pt"' })
     expect(verify(march as SignedRecord, marchReceipt as Receipt, anchorLog, 'not-hex').ok).toBe(false)
+  })
+})
+
+describe('display units', () => {
+  it('matches the Rust vectors exactly', () => {
+    expect(pricePerUnitMilli(431, 1000, 'us_gal', 'us_gal')).toBe(431_000n)
+    expect(pricePerUnitMilli(431, 1000, 'us_gal', 'l')).toBe(113_858n)
+    expect(pricePerUnitMilli(431, 1000, 'us_gal', 'us_pt')).toBe(53_875n)
+    expect(pricePerUnitMilli(431, 1000, 'us_gal', 'imp_pt')).toBe(64_701n)
+    expect(pricePerUnitMilli(1295, 1000, 'l', 'us_gal')).toBe(4_902_108n)
+    expect(pricePerUnitMilli(1295, 1000, 'l', 'imp_pt')).toBe(735_898n)
+    expect(pricePerUnitMilli(100, 1000, 'l', 'lb')).toBeNull()
+  })
+
+  it('defaults to US units only for US readers', () => {
+    expect(defaultDisplayUnit('l', 'en-US')).toBe('us_gal')
+    expect(defaultDisplayUnit('kg', 'en-US')).toBe('lb')
+    expect(defaultDisplayUnit('us_gal', 'da-DK')).toBe('l')
+    expect(defaultDisplayUnit('l', 'en-GB')).toBe('l')
+    expect(defaultDisplayUnit('l', 'en')).toBe('l') // no region given: metric
+    expect(defaultDisplayUnit('l', undefined)).toBe('l')
+    expect(defaultDisplayUnit('each', 'en-US')).toBe('each')
+  })
+
+  it('formats prices in the currency notation', () => {
+    expect(formatUnitPrice(431_000n, 'USD')).toBe('$4.31')
+    expect(formatUnitPrice(113_858n, 'USD')).toBe('$1.14')
+    expect(formatUnitPrice(250_400n, 'JPY')).toBe('¥250')
+    // Beyond Number's exact range: every digit must survive.
+    expect(formatUnitPrice(123_456_789_012_345_678_901n, 'USD')).toBe('$1,234,567,890,123,456.79')
   })
 })

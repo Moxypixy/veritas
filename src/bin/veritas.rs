@@ -5,7 +5,7 @@
 //! veritas attest <key-file> <draft.json> <signed.json>
 //! veritas batch  <anchor-log.json> <out-dir> <signed.json>...
 //! veritas verify <signed.json> <receipt.json> <anchor-log.json> <live-acc-hex>
-//! veritas unit-price <signed.json>
+//! veritas unit-price <signed.json> [display-unit]
 //! ```
 //!
 //! `attest` reads a draft record (no salt or attester needed), fills in a fresh
@@ -30,7 +30,7 @@ const USAGE: &str = "usage:
   veritas attest <key-file> <draft.json> <signed.json>
   veritas batch <anchor-log.json> <out-dir> <signed.json>...
   veritas verify <signed.json> <receipt.json> <anchor-log.json> <live-acc-hex>
-  veritas unit-price <signed.json>";
+  veritas unit-price <signed.json> [l|ml|us_gal|us_pt|imp_gal|imp_pt|kg|g|lb|oz|each]";
 
 /// A record before attestation: salt and attester are filled in by `attest`.
 #[derive(Deserialize)]
@@ -67,7 +67,9 @@ fn main() -> ExitCode {
         Some("attest") if args.len() == 4 => attest(&args[1], &args[2], &args[3]),
         Some("batch") if args.len() >= 4 => batch(&args[1], &args[2], &args[3..]),
         Some("verify") if args.len() == 5 => verify(&args[1], &args[2], &args[3], &args[4]),
-        Some("unit-price") if args.len() == 2 => unit_price(&args[1]),
+        Some("unit-price") if args.len() == 2 || args.len() == 3 => {
+            unit_price(&args[1], args.get(2).map(String::as_str))
+        }
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);
@@ -222,20 +224,37 @@ fn verify(
     }
 }
 
-fn unit_price(signed_path: &str) -> CliResult<ExitCode> {
+fn unit_price(signed_path: &str, display: Option<&str>) -> CliResult<ExitCode> {
     let signed: SignedRecord = read_json(signed_path)?;
     let record = &signed.record;
     let base = match record.unit.dimension() {
-        veritas::Dimension::Volume => "litre",
-        veritas::Dimension::Mass => "kg",
-        veritas::Dimension::Count => "item",
+        veritas::Dimension::Volume => Unit::Litre,
+        veritas::Dimension::Mass => Unit::Kilogram,
+        veritas::Dimension::Count => Unit::Each,
     };
-    let milli = record.price_per_base_milli().ok_or("quantity is zero")?;
+    let display = match display {
+        Some(code) => Unit::from_code(code).ok_or_else(|| format!("unknown unit `{code}`"))?,
+        None => base,
+    };
+    let milli = veritas::units::price_per_unit_milli(
+        record.amount_minor,
+        record.qty_milli,
+        record.unit,
+        display,
+    )
+    .ok_or_else(|| {
+        format!(
+            "cannot show a price per {} for a record measured in {}",
+            display.code(),
+            record.unit.code()
+        )
+    })?;
     println!(
-        "{}.{:03} {} minor units per {base}",
+        "{}.{:03} {} minor units per {}",
         milli / 1000,
         milli % 1000,
-        record.currency
+        record.currency,
+        display.code()
     );
     Ok(ExitCode::SUCCESS)
 }

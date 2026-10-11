@@ -6,16 +6,23 @@ import demoReceipt from '../../../examples/demo/receipts/milk-2026-03.receipt.js
 import demoAcc from '../../../examples/demo/live-acc.txt?raw'
 import Navigation from '../Navigation'
 import {
-  BASE_UNIT,
-  formatMilli,
+  DISPLAY_UNITS,
+  UNIT_DIMENSION,
+  defaultDisplayUnit,
+  formatUnitPrice,
+  pricePerUnitMilli,
+  unitLabel,
   verify,
   type AnchorLog,
   type Receipt,
   type SignedRecord,
+  type Unit,
   type Verdict,
 } from '../veritas/verify'
 
 type Inputs = { record: string; receipt: string; log: string; acc: string }
+
+const browserLocale = () => (typeof navigator === 'undefined' ? undefined : navigator.language)
 
 const EMPTY: Inputs = { record: '', receipt: '', log: '', acc: '' }
 
@@ -46,7 +53,17 @@ export function runVerification(inputs: Inputs): { verdict: Verdict; signed: Sig
   return { verdict: verify(signed, receipt, log, inputs.acc), signed }
 }
 
-export function VerdictView({ verdict, signed }: { verdict: Verdict; signed: SignedRecord | null }) {
+export function VerdictView({
+  verdict,
+  signed,
+  displayUnit,
+  onDisplayUnitChange,
+}: {
+  verdict: Verdict
+  signed: SignedRecord | null
+  displayUnit?: Unit
+  onDisplayUnitChange?: (unit: Unit) => void
+}) {
   if (!verdict.ok) {
     return (
       <section className="verdict verdict-no" aria-labelledby="verdict-heading">
@@ -67,14 +84,31 @@ export function VerdictView({ verdict, signed }: { verdict: Verdict; signed: Sig
         </p>
       )}
       <dl className="facts">
-        {verdict.pricePerBaseMilli !== null && record && (
-          <div>
-            <dt>Unit price</dt>
-            <dd>
-              {formatMilli(verdict.pricePerBaseMilli)} {record.currency} minor units per {BASE_UNIT[record.unit]}
-            </dd>
-          </div>
-        )}
+        {verdict.pricePerBaseMilli !== null && record && (() => {
+          const options = DISPLAY_UNITS[UNIT_DIMENSION[record.unit]]
+          const chosen = displayUnit && UNIT_DIMENSION[displayUnit] === UNIT_DIMENSION[record.unit]
+            ? displayUnit
+            : defaultDisplayUnit(record.unit, browserLocale())
+          const milli = pricePerUnitMilli(record.amount_minor, record.qty_milli, record.unit, chosen)
+          return (
+            <div>
+              <dt>Unit price</dt>
+              <dd>
+                {milli !== null && `${formatUnitPrice(milli, record.currency)} per ${unitLabel(chosen)}`}
+                {options.length > 1 && onDisplayUnitChange && (
+                  <>
+                    <label htmlFor="display-unit" className="inline-label">Show per</label>
+                    <select id="display-unit" value={chosen} onChange={(e) => onDisplayUnitChange(e.currentTarget.value as Unit)}>
+                      {options.map((option) => (
+                        <option key={option.unit} value={option.unit}>{option.label}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </dd>
+            </div>
+          )
+        })()}
         <div>
           <dt>What the date means</dt>
           <dd>{verdict.timeClaim}</dd>
@@ -95,6 +129,7 @@ export function VerdictView({ verdict, signed }: { verdict: Verdict; signed: Sig
 export default function VerifyPage() {
   const [inputs, setInputs] = useState<Inputs>(EMPTY)
   const [result, setResult] = useState<ReturnType<typeof runVerification> | null>(null)
+  const [displayUnit, setDisplayUnit] = useState<Unit | undefined>(undefined)
 
   function update(field: keyof Inputs, value: string) {
     setInputs((current) => ({ ...current, [field]: value }))
@@ -182,7 +217,9 @@ export default function VerifyPage() {
         <button type="submit">Verify</button>
 
         <div role="status" aria-live="polite">
-          {result && <VerdictView verdict={result.verdict} signed={result.signed} />}
+          {result && (
+            <VerdictView verdict={result.verdict} signed={result.signed} displayUnit={displayUnit} onDisplayUnitChange={setDisplayUnit} />
+          )}
         </div>
       </form>
     </main>

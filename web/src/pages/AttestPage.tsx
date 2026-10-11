@@ -11,13 +11,14 @@ import {
   type KaspireProvider,
 } from '../wallet/kaspire'
 import {
-  BASE_UNIT,
   UNIT_PICO,
   attestationMessage,
   bytesToHex,
-  formatMilli,
   kccHash,
-  pricePerBaseMilli,
+  defaultDisplayUnit,
+  formatUnitPrice,
+  pricePerUnitMilli,
+  unitLabel,
   recordLeaf,
   validateRecord,
   type PriceRecord,
@@ -164,7 +165,9 @@ export default function AttestPage() {
     }
   }
 
-  const unitPrice = signed ? pricePerBaseMilli(signed.record.amount_minor, signed.record.qty_milli, signed.record.unit) : null
+  const displayUnit = signed ? defaultDisplayUnit(signed.record.unit, navigator.language) : null
+  const unitPrice =
+    signed && displayUnit ? pricePerUnitMilli(signed.record.amount_minor, signed.record.qty_milli, signed.record.unit, displayUnit) : null
 
   return (
     <main className="page">
@@ -248,7 +251,7 @@ export default function AttestPage() {
               <h2 id="signed-heading">Signed</h2>
               <p>
                 {signed.record.item}, {signed.record.observed_on}
-                {unitPrice !== null && ` · ${formatMilli(unitPrice)} ${signed.record.currency} minor units per ${BASE_UNIT[signed.record.unit]}`}
+                {unitPrice !== null && displayUnit && ` · ${formatUnitPrice(unitPrice, signed.record.currency)} per ${unitLabel(displayUnit)}`}
               </p>
               <button type="button" onClick={() => downloadJson(`${signed.record.item}-${signed.record.observed_on}.signed.json`, signed)}>
                 Download signed record

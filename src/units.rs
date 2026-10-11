@@ -139,9 +139,66 @@ pub fn price_per_base_milli(amount_minor: u64, qty_milli: u64, unit: Unit) -> Op
     Some((numerator + denominator / 2) / denominator)
 }
 
+/// Price per one `display` unit in thousandths of the minor currency unit,
+/// rounded half up, for display in the unit a reader is used to (litre, US
+/// gallon, imperial pint, ...). `None` when the quantity is zero or the units
+/// measure different things. Records are never stored in display units.
+///
+/// Example: 431 cents for 1 US gallon is 431 000 milli-cents per US gallon
+/// and 113 858 per litre.
+pub fn price_per_unit_milli(
+    amount_minor: u64,
+    qty_milli: u64,
+    unit: Unit,
+    display: Unit,
+) -> Option<u128> {
+    if unit.dimension() != display.dimension() {
+        return None;
+    }
+    // amount / (qty_milli / 1000 * pico_unit / pico_display) * 1000
+    //   = amount * 1e3 * 1e3 * pico_display / (qty_milli * pico_unit)
+    let numerator = u128::from(amount_minor) * 1_000_000 * display.pico_base();
+    let denominator = u128::from(qty_milli) * unit.pico_base();
+    if denominator == 0 {
+        return None;
+    }
+    Some((numerator + denominator / 2) / denominator)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_units_match_the_base_price_and_each_other() {
+        // 4.31 USD per US gallon, shown in the units different readers use.
+        let price = |display| price_per_unit_milli(431, 1_000, Unit::UsGallon, display);
+        assert_eq!(price(Unit::UsGallon), Some(431_000));
+        assert_eq!(
+            price(Unit::Litre),
+            price_per_base_milli(431, 1_000, Unit::UsGallon)
+        );
+        assert_eq!(price(Unit::UsPint), Some(53_875)); // exactly 1/8 gallon
+        assert_eq!(price(Unit::ImperialPint), Some(64_701));
+        // 12.95 DKK per litre shown per US gallon and per imperial pint.
+        assert_eq!(
+            price_per_unit_milli(1_295, 1_000, Unit::Litre, Unit::UsGallon),
+            Some(4_902_108)
+        );
+        assert_eq!(
+            price_per_unit_milli(1_295, 1_000, Unit::Litre, Unit::ImperialPint),
+            Some(735_898)
+        );
+    }
+
+    #[test]
+    fn display_units_must_measure_the_same_thing() {
+        assert_eq!(
+            price_per_unit_milli(100, 1_000, Unit::Litre, Unit::Pound),
+            None
+        );
+        assert_eq!(price_per_unit_milli(100, 0, Unit::Litre, Unit::Litre), None);
+    }
 
     #[test]
     fn codes_round_trip_and_reject_ambiguous_names() {
