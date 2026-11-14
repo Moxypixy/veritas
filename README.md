@@ -171,8 +171,8 @@ Done:
   appends pass for both a key and a covenant-ID batcher; rewriting history, a
   foreign key or lineage, malformed witnesses, unsupported KCC-2 schemes,
   handing over the batcher, forking into two anchors, deleting the anchor,
-  signatures other than SIGHASH_ALL, and appends that pay more than
-  0.02 KAS in fees or move the anchor's value elsewhere are rejected.
+  signatures other than SIGHASH_ALL, and appends that remove more than
+  0.02 KAS from the anchor are rejected.
 - Kaspire attestation and Pulse login, with a KIP-5 login verifier in the API.
 - CLI demo and a browser verifier that agrees with Rust on committed fixtures.
 

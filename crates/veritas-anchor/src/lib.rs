@@ -25,8 +25,10 @@ pub const ANCHOR_SOURCE: &str = include_str!("../../../covenants/anchor.sil");
 pub const CONTRACT_NAME: &str = "VeritasAnchor";
 /// Policy function name in `anchor.sil` (the public entry is `append`).
 pub const APPEND_DECLARATION: &str = "append_batch";
-/// Most an `append` may pay in fees, in sompi (0.02 KAS). Must equal
-/// `MAX_APPEND_FEE` in `anchor.sil`; the covenant tests check the boundary.
+/// Most an `append` may remove from the anchor's value, in sompi (0.02 KAS).
+/// It bounds what the anchor pays toward the fee, not the transaction's total
+/// fee, which other inputs may fund. Must equal `MAX_APPEND_FEE` in
+/// `anchor.sil`; the covenant tests check the boundary.
 pub const MAX_APPEND_FEE: u64 = 2_000_000;
 
 pub type AnchorResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;

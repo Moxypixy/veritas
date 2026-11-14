@@ -469,7 +469,7 @@ fn a_sighash_none_signature_cannot_be_reused_for_another_root() {
 }
 
 #[test]
-fn the_fee_an_append_may_take_is_bounded() {
+fn an_append_may_remove_at_most_max_append_fee() {
     let batcher = keypair(7);
     let state = key_anchor(&batcher);
     let root = [0x42; 32];
@@ -485,12 +485,11 @@ fn the_fee_an_append_may_take_is_bounded() {
         execute(tx, entries)
     };
 
-    append_keeping(VALUE - MAX_APPEND_FEE).expect("a fee of exactly MAX_APPEND_FEE must pass");
+    append_keeping(VALUE - MAX_APPEND_FEE).expect("removing exactly MAX_APPEND_FEE must pass");
     append_keeping(VALUE).expect("a successor keeping the whole value must pass");
-    append_keeping(VALUE + 1_000_000).expect("topping the anchor up must pass");
     assert!(
         append_keeping(VALUE - MAX_APPEND_FEE - 1).is_err(),
-        "a fee above MAX_APPEND_FEE must fail"
+        "removing more than MAX_APPEND_FEE from the anchor must fail"
     );
     assert!(
         append_keeping(1_000).is_err(),
@@ -520,4 +519,40 @@ fn covenant_id_authority_cannot_drain_the_anchor() {
         execute(tx, entries).is_err(),
         "an authorised append must still keep the anchor's value"
     );
+}
+
+#[test]
+fn a_funded_append_may_top_the_anchor_up() {
+    let batcher = keypair(7);
+    let state = key_anchor(&batcher);
+    let root = [0x42; 32];
+    let current = compile(&state).unwrap();
+    let next = compile(&state.after(&root)).unwrap();
+    const TOP_UP: u64 = 2_000_000;
+
+    // Input 1 is a plain coin that funds the top-up; its own program is not
+    // run here, only the anchor's input 0.
+    let entries = vec![
+        utxo(&current),
+        UtxoEntry::new(
+            TOP_UP,
+            ScriptPublicKey::new(0, vec![0x51].into()),
+            0,
+            false,
+            None,
+        ),
+    ];
+    let mut tx = Transaction::new(
+        1,
+        vec![input(0, vec![]), input(1, vec![])],
+        vec![successor_with_value(&next, VALUE + TOP_UP - 5_000)],
+        0,
+        Default::default(),
+        0,
+        vec![],
+    );
+    let signature = sign(&tx, &entries, &batcher, SIG_HASH_ALL);
+    tx.inputs[0].signature_script = append_sig_script(&current, &root, &signature).unwrap();
+    tx.finalize();
+    execute(tx, entries).expect("a successor holding more than the anchor input must pass");
 }
