@@ -4,7 +4,9 @@ use kaspa_consensus_core::{
     Hash,
     hashing::{
         sighash::{SigHashReusedValuesUnsync, calc_schnorr_signature_hash},
-        sighash_type::SIG_HASH_ALL,
+        sighash_type::{
+            SIG_HASH_ALL, SIG_HASH_ANY_ONE_CAN_PAY, SIG_HASH_NONE, SIG_HASH_SINGLE, SigHashType,
+        },
     },
     tx::{
         CovenantBinding, PopulatedTransaction, ScriptPublicKey, Transaction, TransactionId,
@@ -18,7 +20,8 @@ use kaspa_txscript_errors::TxScriptError;
 use secp256k1::{Keypair, Message, SECP256K1, Secp256k1, SecretKey};
 use silverscript_abi::SilAbiArtifact;
 use veritas_anchor::{
-    AnchorState, AuthorityScheme, append_sig_script, compile, compile_raw, script_public_key,
+    AnchorState, AuthorityScheme, MAX_APPEND_FEE, append_sig_script, compile, compile_raw,
+    script_public_key,
 };
 
 const COVENANT: Hash = Hash::from_bytes(*b"VERITAS-ANCHOR-COVENANT-ID-00000");
@@ -51,8 +54,12 @@ fn utxo(artifact: &SilAbiArtifact) -> UtxoEntry {
 }
 
 fn successor(artifact: &SilAbiArtifact) -> TransactionOutput {
+    successor_with_value(artifact, VALUE - 5_000)
+}
+
+fn successor_with_value(artifact: &SilAbiArtifact, value: u64) -> TransactionOutput {
     TransactionOutput {
-        value: VALUE - 5_000,
+        value,
         script_public_key: script_public_key(artifact).unwrap(),
         covenant: Some(CovenantBinding {
             authorizing_input: 0,
@@ -77,6 +84,8 @@ fn input(index: u32, signature_script: Vec<u8>) -> TransactionInput {
 enum Approval<'a> {
     /// `p2pk-schnorr/v1`: 65-byte SIGHASH_ALL signature by this key.
     Key(&'a Keypair),
+    /// `p2pk-schnorr/v1` signed by this key with another sighash type.
+    KeyWithHashType(&'a Keypair, SigHashType),
     /// `covenant-id/v1`: spend an input of this lineage; empty witness.
     CovenantInput(Hash),
     /// `covenant-id/v1` claimed, but no such input is spent.
@@ -108,24 +117,33 @@ fn append_tx(
     let mut tx = Transaction::new(1, inputs, outputs, 0, Default::default(), 0, vec![]);
 
     let witness = match approval {
-        Approval::Key(signer) => {
-            let reused = SigHashReusedValuesUnsync::new();
-            let populated = PopulatedTransaction::new(&tx, entries.clone());
-            let sighash = calc_schnorr_signature_hash(&populated, 0, SIG_HASH_ALL, &reused);
-            let message = Message::from_digest_slice(sighash.as_bytes().as_slice()).unwrap();
-            let mut signature = SECP256K1
-                .sign_schnorr_no_aux_rand(&message, signer)
-                .as_ref()
-                .to_vec();
-            signature.push(SIG_HASH_ALL.to_u8());
-            signature
-        }
+        Approval::Key(signer) => sign(&tx, &entries, signer, SIG_HASH_ALL),
+        Approval::KeyWithHashType(signer, hash_type) => sign(&tx, &entries, signer, hash_type),
         Approval::CovenantInput(_) | Approval::Nothing => vec![],
         Approval::Witness(bytes) => bytes,
     };
     tx.inputs[0].signature_script = append_sig_script(current, batch_root, &witness).unwrap();
     tx.finalize();
     (tx, entries)
+}
+
+/// A real 65-byte Schnorr transaction signature for input 0.
+fn sign(
+    tx: &Transaction,
+    entries: &[UtxoEntry],
+    signer: &Keypair,
+    hash_type: SigHashType,
+) -> Vec<u8> {
+    let reused = SigHashReusedValuesUnsync::new();
+    let populated = PopulatedTransaction::new(tx, entries.to_vec());
+    let sighash = calc_schnorr_signature_hash(&populated, 0, hash_type, &reused);
+    let message = Message::from_digest_slice(sighash.as_bytes().as_slice()).unwrap();
+    let mut signature = SECP256K1
+        .sign_schnorr_no_aux_rand(&message, signer)
+        .as_ref()
+        .to_vec();
+    signature.push(hash_type.to_u8());
+    signature
 }
 
 fn execute(tx: Transaction, entries: Vec<UtxoEntry>) -> Result<(), TxScriptError> {
@@ -376,4 +394,165 @@ fn unsupported_scheme_bytes_cannot_append() {
             "scheme {scheme:#04x} must be rejected"
         );
     }
+}
+
+#[test]
+fn only_sighash_all_signatures_can_append() {
+    let batcher = keypair(7);
+    let state = key_anchor(&batcher);
+    let root = [0x42; 32];
+    let current = compile(&state).unwrap();
+    let next = compile(&state.after(&root)).unwrap();
+    let acp = SIG_HASH_ANY_ONE_CAN_PAY.to_u8();
+    let partial = [
+        SIG_HASH_NONE,
+        SIG_HASH_SINGLE,
+        SigHashType::from_u8(SIG_HASH_ALL.to_u8() | acp).unwrap(),
+        SigHashType::from_u8(SIG_HASH_NONE.to_u8() | acp).unwrap(),
+        SigHashType::from_u8(SIG_HASH_SINGLE.to_u8() | acp).unwrap(),
+    ];
+
+    for hash_type in partial {
+        let (tx, entries) = append_tx(
+            &current,
+            &root,
+            Approval::KeyWithHashType(&batcher, hash_type),
+            vec![successor(&next)],
+        );
+        assert!(
+            execute(tx, entries).is_err(),
+            "sighash type {:#04x} must be rejected",
+            hash_type.to_u8()
+        );
+    }
+}
+
+#[test]
+fn a_sighash_none_signature_cannot_be_reused_for_another_root() {
+    let batcher = keypair(7);
+    let state = key_anchor(&batcher);
+    let current = compile(&state).unwrap();
+    let honest = compile(&state.after(&[0x42; 32])).unwrap();
+    let evil_root = [0x66; 32];
+    let evil = compile(&state.after(&evil_root)).unwrap();
+
+    // The batcher signs the honest append with SIGHASH_NONE, which does not
+    // commit to the outputs ...
+    let entries = vec![utxo(&current)];
+    let signed = Transaction::new(
+        1,
+        vec![input(0, vec![])],
+        vec![successor(&honest)],
+        0,
+        Default::default(),
+        0,
+        vec![],
+    );
+    let signature = sign(&signed, &entries, &batcher, SIG_HASH_NONE);
+
+    // ... so anyone could move that signature to a successor of their own.
+    let mut tx = Transaction::new(
+        1,
+        vec![input(0, vec![])],
+        vec![successor(&evil)],
+        0,
+        Default::default(),
+        0,
+        vec![],
+    );
+    tx.inputs[0].signature_script = append_sig_script(&current, &evil_root, &signature).unwrap();
+    tx.finalize();
+    assert!(
+        execute(tx, entries).is_err(),
+        "a relayed SIGHASH_NONE signature must not append another root"
+    );
+}
+
+#[test]
+fn an_append_may_remove_at_most_max_append_fee() {
+    let batcher = keypair(7);
+    let state = key_anchor(&batcher);
+    let root = [0x42; 32];
+    let current = compile(&state).unwrap();
+    let next = compile(&state.after(&root)).unwrap();
+    let append_keeping = |value: u64| {
+        let (tx, entries) = append_tx(
+            &current,
+            &root,
+            Approval::Key(&batcher),
+            vec![successor_with_value(&next, value)],
+        );
+        execute(tx, entries)
+    };
+
+    append_keeping(VALUE - MAX_APPEND_FEE).expect("removing exactly MAX_APPEND_FEE must pass");
+    append_keeping(VALUE).expect("a successor keeping the whole value must pass");
+    assert!(
+        append_keeping(VALUE - MAX_APPEND_FEE - 1).is_err(),
+        "removing more than MAX_APPEND_FEE from the anchor must fail"
+    );
+    assert!(
+        append_keeping(1_000).is_err(),
+        "the anchor value must not be drained"
+    );
+}
+
+#[test]
+fn covenant_id_authority_cannot_drain_the_anchor() {
+    let state = AnchorState::genesis(GOVERNANCE.as_bytes(), AuthorityScheme::CovenantId);
+    let root = [0x42; 32];
+    let current = compile(&state).unwrap();
+    let next = compile(&state.after(&root)).unwrap();
+    let side = TransactionOutput {
+        value: VALUE - 2_000_000,
+        script_public_key: ScriptPublicKey::new(0, vec![0x51].into()),
+        covenant: None,
+    };
+
+    let (tx, entries) = append_tx(
+        &current,
+        &root,
+        Approval::CovenantInput(GOVERNANCE),
+        vec![successor_with_value(&next, 1_000_000), side],
+    );
+    assert!(
+        execute(tx, entries).is_err(),
+        "an authorised append must still keep the anchor's value"
+    );
+}
+
+#[test]
+fn a_funded_append_may_top_the_anchor_up() {
+    let batcher = keypair(7);
+    let state = key_anchor(&batcher);
+    let root = [0x42; 32];
+    let current = compile(&state).unwrap();
+    let next = compile(&state.after(&root)).unwrap();
+    const TOP_UP: u64 = 2_000_000;
+
+    // Input 1 is a plain coin that funds the top-up; its own program is not
+    // run here, only the anchor's input 0.
+    let entries = vec![
+        utxo(&current),
+        UtxoEntry::new(
+            TOP_UP,
+            ScriptPublicKey::new(0, vec![0x51].into()),
+            0,
+            false,
+            None,
+        ),
+    ];
+    let mut tx = Transaction::new(
+        1,
+        vec![input(0, vec![]), input(1, vec![])],
+        vec![successor_with_value(&next, VALUE + TOP_UP - 5_000)],
+        0,
+        Default::default(),
+        0,
+        vec![],
+    );
+    let signature = sign(&tx, &entries, &batcher, SIG_HASH_ALL);
+    tx.inputs[0].signature_script = append_sig_script(&current, &root, &signature).unwrap();
+    tx.finalize();
+    execute(tx, entries).expect("a successor holding more than the anchor input must pass");
 }
