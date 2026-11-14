@@ -81,7 +81,7 @@ read the anchor like any other covenant:
 | KCC-1 Covenant Concepts, Byte Layouts and ABI | The anchor is compiled by Silverscript 1.0, which emits KCC-1 state encoding, dispatch tags (`append` = `c6b9047f`) and the P2SH envelope. The singleton declaration validates the continuation's program, state and covenant binding. Veritas commitments use the KCC-1 Hash Function (BLAKE3-256). |
 | KCC-1 Program ABI | Published in [`covenants/anchor.abi.json`](covenants/anchor.abi.json). The template hash, the same for every anchor state, is in [`covenants/anchor.template-hash.txt`](covenants/anchor.template-hash.txt); a test fails if it drifts from the source. |
 | KCC-2 Authority Schemes | The batcher is an authority with a canonical scheme byte: `0x00` `p2pk-schnorr/v1` (a key) or `0x04` `covenant-id/v1` (a governance or multisig covenant must take part). Other bytes are rejected on chain. |
-| KCC-20 Fungible Token | Not a token, so not a KCC-20 instance. The anchor reuses KCC-20's owner-authentication witness layout: 65-byte signature for `p2pk-schnorr/v1`, empty for `covenant-id/v1`. |
+| KCC-20 Fungible Token | Not a token, so not a KCC-20 instance. The anchor reuses KCC-20's owner-authentication witness layout: 65-byte signature for `p2pk-schnorr/v1` (SIGHASH_ALL only, enforced on chain), empty for `covenant-id/v1`. |
 | KIP-5 Message Signing | Attesters sign records, and Pulse users sign logins, with KIP-5; checked against the official KIP-5 test vectors in Rust and TypeScript. |
 | KIP-20 Covenant IDs | The anchor is one covenant lineage; wallets identify it by Covenant ID plus the template hash above. |
 
@@ -170,8 +170,9 @@ Done:
 - Anchor covenant in Silverscript, tested in Kaspa's script engine: honest
   appends pass for both a key and a covenant-ID batcher; rewriting history, a
   foreign key or lineage, malformed witnesses, unsupported KCC-2 schemes,
-  handing over the batcher, forking into two anchors and deleting the anchor
-  are rejected.
+  handing over the batcher, forking into two anchors, deleting the anchor,
+  signatures other than SIGHASH_ALL, and appends that pay more than
+  0.02 KAS in fees or move the anchor's value elsewhere are rejected.
 - Kaspire attestation and Pulse login, with a KIP-5 login verifier in the API.
 - CLI demo and a browser verifier that agrees with Rust on committed fixtures.
 

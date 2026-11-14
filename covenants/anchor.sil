@@ -18,12 +18,20 @@ pragma silverscript ^0.1.0;
 //   governance or multisig covenant run the anchor later).
 // - Witness layout follows KCC-20's owner-authentication table:
 //   p2pk-schnorr/v1 -> 65-byte transaction signature, covenant-id/v1 -> empty.
+//   The signature must be SIGHASH_ALL (last byte 0x01): any other type leaves
+//   outputs or inputs unsigned, so a relayed signature could append a root the
+//   batcher never chose.
+// - Value: the successor keeps the anchor's value less at most MAX_APPEND_FEE,
+//   so no append (including one approved by a covenant-id authority) can move
+//   the anchor's KAS elsewhere. Adding value is allowed.
 //
 // Must stay in step with `veritas::accumulator::next_acc` and
 // `veritas_anchor::AuthorityScheme`.
 contract VeritasAnchor(byte[32] init_batcher, byte init_batcher_scheme, byte[32] init_acc, int init_count) {
     byte constant SCHEME_P2PK_SCHNORR = 0x00;
     byte constant SCHEME_COVENANT_ID = 0x04;
+    // 0.02 KAS. Must equal `veritas_anchor::MAX_APPEND_FEE`.
+    int constant MAX_APPEND_FEE = 2000000;
 
     byte[32] batcher = init_batcher;
     byte batcher_scheme = init_batcher_scheme;
@@ -34,6 +42,7 @@ contract VeritasAnchor(byte[32] init_batcher, byte init_batcher_scheme, byte[32]
     function requireBatcher(byte[32] authority, byte scheme, byte[] witness) {
         if (scheme == SCHEME_P2PK_SCHNORR) {
             require(witness.length == 65);
+            require(witness.slice(64, 65) == byte[](0x01));
             require(checkSig(sig(witness), pubkey(authority)));
         } else if (scheme == SCHEME_COVENANT_ID) {
             require(witness.length == 0);
@@ -46,6 +55,9 @@ contract VeritasAnchor(byte[32] init_batcher, byte init_batcher_scheme, byte[32]
     #[covenant.singleton(mode = transition, name = append)]
     function append_batch(State prev_state, byte[32] batch_root, byte[] witness) : (State) {
         requireBatcher(prev_state.batcher, prev_state.batcher_scheme, witness);
+        require(OpAuthOutputCount(this.activeInputIndex) == 1);
+        int successor = OpAuthOutputIdx(this.activeInputIndex, 0);
+        require(tx.outputs[successor].value >= tx.inputs[this.activeInputIndex].value - MAX_APPEND_FEE);
         byte[32] next_acc = blake3(byte[](prev_state.acc) + byte[](batch_root));
         return(State {
             batcher: prev_state.batcher,
